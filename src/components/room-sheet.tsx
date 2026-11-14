@@ -34,7 +34,7 @@ function Body({ room, panel, setPanel, close }: { room: Room; panel: Panel; setP
   const tenant = lease ? tenants.get(lease.tenantId) : undefined;
   const roomBills = bills.filter((b) => b.roomId === room.id);
   const open = roomBills.filter((b) => b.status === "unpaid" || b.status === "partial");
-  const history = roomBills.filter((b) => b.status === "paid").slice(0, 3);
+  const history = roomBills.filter((b) => b.status === "paid" || b.status === "carried").slice(0, 3);
   const nightly = room.kind !== "monthly";
   const back = <button className="mb-3 min-h-10 text-brand" onClick={() => setPanel("main")}>‹ กลับ</button>;
 
@@ -84,7 +84,7 @@ function Body({ room, panel, setPanel, close }: { room: Room; panel: Panel; setP
 
       {history.length > 0 && (
         <section>
-          <h3 className="mb-2 font-semibold">จ่ายแล้วล่าสุด</h3>
+          <h3 className="mb-2 font-semibold">บิลก่อนหน้า</h3>
           <ul className="space-y-2">{history.map((b) => <BillRow key={b.id} bill={b} />)}</ul>
         </section>
       )}

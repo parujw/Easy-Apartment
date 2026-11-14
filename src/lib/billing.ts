@@ -30,7 +30,7 @@ function extras(e: Extras): BillItem[] {
   if (e.ac) out.push(item("ac", "ค่าเช่าแอร์", 1, e.ac));
   if (e.parking) out.push(item("parking", "ค่าที่จอดรถ", 1, e.parking));
   if (e.other) out.push(item("other", "ค่าอื่นๆ", 1, e.other));
-  if (e.prevBalance) out.push(item("prev_balance", "ยอดค้างเดิม", 1, e.prevBalance));
+  if (e.prevBalance) out.push(item("prev_balance", "ยอดค้างยกมา", 1, e.prevBalance));
   if (e.discount) out.push(item("discount", "ส่วนลด", 1, -Math.abs(e.discount)));
   return out;
 }

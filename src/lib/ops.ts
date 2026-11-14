@@ -1,7 +1,7 @@
 // All writes the app makes. Firestore rules enforce membership, the active subscription,
 // +1-only counters and one document per booked night.
 import {
-  collection, deleteDoc, doc, runTransaction, updateDoc, writeBatch, type DocumentReference,
+  collection, deleteDoc, doc, getDocs, query, runTransaction, updateDoc, where, writeBatch, type DocumentReference,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { total as sumItems, type BillItem } from "@/lib/billing";
@@ -34,6 +34,8 @@ export type NewBill = {
   room: Pick<Room, "id" | "number">; tenantName: string; leaseId: string | null; bookingId: string | null;
   periodStart: string; periodEnd: string; dueDate: string; items: BillItem[]; note?: string;
   meter?: { readOn: string; elec: number; water: number };
+  /** earlier open bills of this lease whose balance is included as a "ยอดค้างยกมา" item */
+  carryFrom?: Bill[];
 };
 
 function publicCopy(p: Property, b: Omit<Bill, "id">) {
@@ -62,6 +64,10 @@ export async function issueBill(p: Property, n: NewBill): Promise<Bill> {
   batch.set(doc(db(), "publicBills", bill.publicToken), publicCopy(p, bill));
   if (n.meter) batch.set(ref(p.id, "meterReadings", `${n.room.id}_${n.meter.readOn}`), { roomId: n.room.id, ...n.meter });
   if (n.bookingId) batch.update(ref(p.id, "bookings", n.bookingId), { billId: billRef.id });
+  for (const old of n.carryFrom ?? []) {
+    batch.update(ref(p.id, "bills", old.id), { status: "carried", carriedTo: billRef.id, carriedStatus: old.status });
+    batch.update(doc(db(), "publicBills", old.publicToken), { status: "carried" });
+  }
   await batch.commit();
   return { id: billRef.id, ...bill };
 }
@@ -85,11 +91,19 @@ export async function receivePayment(p: Property, billId: string, amount: number
   return receiptNo;
 }
 
+/** Void (never delete). Bills whose balance was carried into this one become open again. */
 export async function voidBill(p: Property, bill: Bill) {
   if (bill.paid > 0) throw new Error("บิลที่รับชำระแล้วยกเลิกไม่ได้");
+  const carried = await getDocs(query(col(p.id, "bills"), where("carriedTo", "==", bill.id)));
   const batch = writeBatch(db());
   batch.update(ref(p.id, "bills", bill.id), { status: "void" });
   batch.delete(doc(db(), "publicBills", bill.publicToken));
+  for (const d of carried.docs) {
+    const old = d.data() as Omit<Bill, "id">;
+    const status = old.carriedStatus ?? (old.paid > 0 ? "partial" : "unpaid");
+    batch.update(d.ref, { status, carriedTo: null, carriedStatus: null });
+    batch.update(doc(db(), "publicBills", old.publicToken), { status });
+  }
   await batch.commit();
 }
 

@@ -93,3 +93,24 @@ test("due date and month range", () => {
   assert.equal(dueDateFor("2026-12-20", 5), "2027-01-05");
   assert.deepEqual(monthRange("2027-02"), { start: "2027-02-01", end: "2027-02-28" });
 });
+
+import { carryOverBills, carryAmount, billedRevenue } from "./carry.ts";
+
+test("carry-over takes only this lease's earlier unpaid balances", () => {
+  const bills = [
+    { id: "a", leaseId: "L1", period: "2026-10", status: "partial", total: 4000, paid: 2600 },
+    { id: "b", leaseId: "L1", period: "2026-09", status: "unpaid", total: 500, paid: 0 },
+    { id: "c", leaseId: "L1", period: "2026-11", status: "unpaid", total: 4000, paid: 0 }, // same period: not earlier
+    { id: "d", leaseId: "L0", period: "2026-10", status: "unpaid", total: 9000, paid: 0 }, // previous tenant
+    { id: "e", leaseId: "L1", period: "2026-08", status: "paid", total: 4000, paid: 4000 },
+    { id: "f", leaseId: "L1", period: "2026-08", status: "carried", total: 300, paid: 0 },
+  ];
+  const got = carryOverBills(bills, "L1", "2026-11");
+  assert.deepEqual(got.map((b) => b.id), ["a", "b"]);
+  assert.equal(carryAmount(got), 1900);
+  assert.deepEqual(carryOverBills(bills, null, "2026-11"), []);
+});
+
+test("billed revenue excludes carried-over debt", () => {
+  assert.equal(billedRevenue([{ items: [{ kind: "rent", amount: 3500 }, { kind: "prev_balance", amount: 1400 }, { kind: "discount", amount: -100 }] }]), 3400);
+});

@@ -28,7 +28,7 @@ export default function PublicBill({ params }: { params: Promise<{ token: string
 
   const due = bill && bill !== "missing" ? Math.round((bill.total - bill.paid) * 100) / 100 : 0;
   useEffect(() => {
-    if (!bill || bill === "missing" || due <= 0 || !bill.property.promptpayId) return;
+    if (!bill || bill === "missing" || due <= 0 || !bill.property.promptpayId || bill.status === "carried") return;
     try {
       QRCode.toDataURL(promptPayPayload(bill.property.promptpayId, due), { margin: 1, width: 480 }).then(setQr);
     } catch { /* invalid PromptPay ID: show the bill without a QR */ }
@@ -37,6 +37,7 @@ export default function PublicBill({ params }: { params: Promise<{ token: string
   if (bill === null) return <p className="p-6 text-muted">กำลังโหลด…</p>;
   if (bill === "missing") return <p className="p-6">ไม่พบบิลนี้ หรือบิลถูกยกเลิกแล้ว</p>;
   const paid = bill.status === "paid";
+  const carried = bill.status === "carried";
 
   return (
     <main className="mx-auto w-full max-w-md p-4">
@@ -53,7 +54,7 @@ export default function PublicBill({ params }: { params: Promise<{ token: string
             <p className="text-sm text-muted">รอบ {isoTh(bill.periodStart)} – {isoTh(bill.periodEnd)}</p>
           </div>
           <span className={`rounded-full px-3 py-1 text-sm font-semibold ${paid ? "bg-emerald-100 text-emerald-900" : "bg-amber-100 text-amber-900"}`}>
-            {paid ? "ชำระแล้ว" : bill.status === "partial" ? "ชำระบางส่วน" : "รอชำระ"}
+            {paid ? "ชำระแล้ว" : carried ? "ยกยอดไปบิลถัดไป" : bill.status === "partial" ? "ชำระบางส่วน" : "รอชำระ"}
           </span>
         </div>
 
@@ -73,7 +74,8 @@ export default function PublicBill({ params }: { params: Promise<{ token: string
         </div>
         {bill.paid > 0 && !paid && <p className="text-right text-sm">ชำระแล้ว ฿{thb(bill.paid)} · คงเหลือ <b>฿{thb(due)}</b></p>}
 
-        {!paid && (
+        {carried && <p className="mt-4 rounded-2xl bg-amber-50 p-4 text-sm text-amber-950">ยอดค้าง ฿{thb(due)} ของบิลนี้ถูกรวมไว้ในบิลรอบถัดไปแล้ว กรุณาชำระตามบิลใหม่</p>}
+        {!paid && !carried && (
           <section className="mt-5 rounded-2xl bg-emerald-50 p-4 text-center text-emerald-950">
             <p className="font-semibold">ชำระภายใน {isoTh(bill.dueDate)}</p>
             {qr ? (

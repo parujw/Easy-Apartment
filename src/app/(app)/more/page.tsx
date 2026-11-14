@@ -11,6 +11,7 @@ import { Btn, Card, Field, NumField, Select, useAction } from "@/components/ui";
 import { addRooms, roomDefaults, setMaintenanceStatus, updateProperty } from "@/lib/ops";
 import { promptPayPayload } from "@/lib/promptpay";
 import { parseRoomNumbers } from "@/lib/rooms";
+import { billedRevenue } from "@/lib/carry";
 import { PLANS } from "@/lib/plans";
 import { dateTh, daysLeftTs, isoTh, monthRange, monthTh, periodOf, todayBkk } from "@/lib/dates";
 import { KIND_TH, METHOD_TH, balance, thb, type Expense, type Maintenance, type Payment, type Room } from "@/lib/model";
@@ -34,7 +35,7 @@ function MonthSummary() {
   const c = (n: string) => collection(db(), "properties", property.id, n);
   const payments = useLive<Payment>(query(c("payments"), where("paidOn", ">=", start), where("paidOn", "<=", end)), `${property.id}/pay/${period}`);
   const expenses = useLive<Expense>(query(c("expenses"), where("spentOn", ">=", start), where("spentOn", "<=", end)), `${property.id}/exp/${period}`);
-  const billed = bills.filter((b) => b.period === period).reduce((s, b) => s + b.total, 0);
+  const billed = billedRevenue(bills.filter((b) => b.period === period));
   const got = payments.reduce((s, p) => s + p.amount, 0);
   const spent = expenses.reduce((s, e) => s + e.amount, 0);
   const owed = openBills.reduce((s, b) => s + balance(b), 0);
@@ -54,7 +55,7 @@ function MonthSummary() {
     <Section title={`สรุป ${monthTh(period)}`} open>
       <input type="month" aria-label="เดือน" className="mb-3 min-h-12 rounded-xl border border-black/15 bg-surface px-2" value={period} onChange={(e) => setPeriod(e.target.value)} />
       <dl className="grid grid-cols-2 gap-3 text-sm">
-        <div><dt className="text-muted">ออกบิล</dt><dd className="text-lg font-bold">฿{thb(billed)}</dd></div>
+        <div><dt className="text-muted">ออกบิล (ไม่รวมยอดยกมา)</dt><dd className="text-lg font-bold">฿{thb(billed)}</dd></div>
         <div><dt className="text-muted">รับเงินแล้ว</dt><dd className="text-lg font-bold text-emerald-700">฿{thb(got)}</dd></div>
         <div><dt className="text-muted">ค่าใช้จ่าย</dt><dd className="text-lg font-bold">฿{thb(spent)}</dd></div>
         <div><dt className="text-muted">คงเหลือ (รับ − จ่าย)</dt><dd className="text-lg font-bold">฿{thb(got - spent)}</dd></div>

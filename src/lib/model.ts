@@ -20,12 +20,15 @@ export type Lease = {
 
 export type MeterReading = { id: string; roomId: string; readOn: string; elec: number; water: number };
 
-export type BillStatus = "unpaid" | "partial" | "paid" | "void";
+/** carried = its unpaid balance moved into a later bill of the same lease (see lib/carry.ts) */
+export type BillStatus = "unpaid" | "partial" | "paid" | "void" | "carried";
 export type Bill = {
   id: string; roomId: string; roomNumber: string; tenantName: string; leaseId: string | null; bookingId: string | null;
   billNo: string; invoiceNo: string; period: string; periodStart: string; periodEnd: string;
   issueDate: string; dueDate: string; items: BillItem[]; total: number; paid: number; status: BillStatus;
   publicToken: string; note: string;
+  /** set on a carried bill: the bill that now holds its balance, and the status to restore if that bill is voided */
+  carriedTo?: string; carriedStatus?: "unpaid" | "partial";
 };
 
 export type Payment = {
@@ -56,7 +59,7 @@ export const STATUS_TH: Record<RoomStatus, string> = {
 export const KIND_TH: Record<RoomKind, string> = { monthly: "รายเดือน", daily: "รายวัน", airbnb: "Airbnb" };
 export const CYCLE_TH: Record<BillingCycle, string> = { daily: "รายวัน", weekly: "รายสัปดาห์", monthly: "รายเดือน", custom: "กำหนดเอง" };
 export const METHOD_TH: Record<Payment["method"], string> = { transfer: "โอน", promptpay: "PromptPay", cash: "เงินสด", card: "บัตร" };
-export const BILL_STATUS_TH: Record<BillStatus, string> = { unpaid: "รอจ่าย", partial: "จ่ายบางส่วน", paid: "จ่ายแล้ว", void: "ยกเลิก" };
+export const BILL_STATUS_TH: Record<BillStatus, string> = { unpaid: "รอจ่าย", partial: "จ่ายบางส่วน", paid: "จ่ายแล้ว", void: "ยกเลิก", carried: "ยกยอดแล้ว" };
 export const EXPENSE_CATEGORIES = ["ค่าซ่อมบำรุง", "ค่าน้ำส่วนกลาง", "ค่าไฟส่วนกลาง", "ค่าทำความสะอาด", "ค่าจ้าง", "อื่นๆ"];
 export const MAINT_CATEGORIES = ["ไฟฟ้า", "ประปา", "แอร์", "ประตู/หน้าต่าง", "เฟอร์นิเจอร์", "อื่นๆ"];
 

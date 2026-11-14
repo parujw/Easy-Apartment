@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useProperty } from "@/components/property-provider";
+import { useData } from "@/components/data-provider";
+import { carryAmount, carryOverBills } from "@/lib/carry";
 import { Btn, Field, NumField, useAction } from "@/components/ui";
 import { issueBill } from "@/lib/ops";
 import { total, type BillItem } from "@/lib/billing";
@@ -13,15 +15,19 @@ const n = (v: number | "") => (v === "" ? 0 : v);
 /** Bill for any period the owner chooses: weekly, custom, deposit, one-off charges. */
 export default function ManualBill({ room, lease, tenantName, onDone }: { room: Room; lease: Lease | undefined; tenantName: string; onDone: () => void }) {
   const { property } = useProperty();
+  const { openBills } = useData();
   const today = todayBkk();
   const weekly = room.billingCycle === "weekly";
   const [f, setF] = useState({
     start: today, end: addDays(today, weekly ? 6 : 29), due: addDays(today, 3),
     rent: (weekly ? "" : lease?.rent ?? room.rentMonthly) as number | "", other: "" as number | "", otherLabel: "", discount: "" as number | "", note: "",
   });
+  const carry = carryOverBills(openBills, lease?.id ?? null, f.start.slice(0, 7));
+  const [withCarry, setWithCarry] = useState(true);
   const items: BillItem[] = [];
   if (n(f.rent)) items.push({ kind: "rent", label: "ค่าเช่าห้อง", qty: 1, unitPrice: n(f.rent), amount: n(f.rent) });
   if (n(f.other)) items.push({ kind: "other", label: f.otherLabel.trim() || "ค่าอื่นๆ", qty: 1, unitPrice: n(f.other), amount: n(f.other) });
+  if (withCarry && carry.length) items.push({ kind: "prev_balance", label: "ยอดค้างยกมา", qty: 1, unitPrice: carryAmount(carry), amount: carryAmount(carry) });
   if (n(f.discount)) items.push({ kind: "discount", label: "ส่วนลด", qty: 1, unitPrice: -n(f.discount), amount: -n(f.discount) });
   const a = useAction();
 
@@ -36,11 +42,17 @@ export default function ManualBill({ room, lease, tenantName, onDone }: { room: 
         <NumField label="จำนวนเงิน" value={f.other} onChange={(v) => setF({ ...f, other: v })} />
         <NumField label="ส่วนลด" value={f.discount} onChange={(v) => setF({ ...f, discount: v })} />
       </div>
+      {carry.length > 0 && (
+        <label className="flex min-h-12 items-center gap-3 text-sm">
+          <input type="checkbox" className="h-5 w-5" checked={withCarry} onChange={(e) => setWithCarry(e.target.checked)} />
+          รวมยอดค้างเดิม ฿{thb(carryAmount(carry))} ({carry.map((b) => b.billNo).join(", ")})
+        </label>
+      )}
       <p className="text-lg font-bold">รวม ฿{thb(total(items))}</p>
       <Btn className="w-full" disabled={a.busy || !items.length} onClick={() => a.run(async () => {
         if (f.end < f.start) throw new Error("วันที่สิ้นสุดต้องไม่ก่อนวันเริ่ม");
         const b = await issueBill(property, { room, tenantName, leaseId: lease?.id ?? null, bookingId: null,
-          periodStart: f.start, periodEnd: f.end, dueDate: f.due, items, note: f.note });
+          periodStart: f.start, periodEnd: f.end, dueDate: f.due, items, note: f.note, carryFrom: withCarry ? carry : [] });
         onDone();
         return `ออกบิล ${b.billNo} แล้ว`;
       })}>ออกบิล</Btn>

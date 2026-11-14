@@ -10,6 +10,7 @@ import { Btn, Card, useAction } from "@/components/ui";
 import { shareBill, billLink } from "@/components/bill-row";
 import { issueBill } from "@/lib/ops";
 import { meterBill, total } from "@/lib/billing";
+import { carryAmount, carryOverBills } from "@/lib/carry";
 import { addDays, dueDateFor, monthRange, monthTh, periodOf, todayBkk } from "@/lib/dates";
 import { thb, type Bill, type MeterReading } from "@/lib/model";
 
@@ -18,7 +19,7 @@ const num = (s: string) => (s.trim() === "" ? NaN : Number(s));
 
 export default function MetersPage() {
   const { property } = useProperty();
-  const { rooms, activeLease, tenants, bills } = useData();
+  const { rooms, activeLease, tenants, bills, openBills } = useData();
   const today = todayBkk();
   const [period, setPeriod] = useState(periodOf(today));
   const since = addDays(today, -400);
@@ -45,14 +46,15 @@ export default function MetersPage() {
     const elecPrev = last ? last.elec : num(r.elecPrev);
     const waterPrev = last ? last.water : num(r.waterPrev);
     const elecCurr = num(r.elecCurr), waterCurr = num(r.waterCurr);
+    const carry = carryOverBills(openBills, lease.id, period);
     let items = null, error = "";
     if ([elecPrev, waterPrev, elecCurr, waterCurr].every(Number.isFinite)) {
       try {
         items = meterBill({ rent: lease.rent, elecPrev, elecCurr, elecRate: lease.elecRate, waterPrev, waterCurr, waterRate: lease.waterRate,
-          ac: lease.acFee, internet: lease.internet, parking: lease.parking });
+          ac: lease.acFee, internet: lease.internet, parking: lease.parking, prevBalance: carryAmount(carry) });
       } catch (e) { error = (e as Error).message; }
     }
-    return { room, lease, last, r, items, error, done: billed.has(room.id) };
+    return { room, lease, last, r, items, error, carry, done: billed.has(room.id) };
   });
   const ready = prepared.filter((p) => p.items && !p.done);
   const set = (id: string, k: keyof Row, v: string) =>
@@ -71,7 +73,7 @@ export default function MetersPage() {
       out.push(await issueBill(property, {
         room: p.room, tenantName: tenant?.fullName ?? "", leaseId: p.lease.id, bookingId: null,
         periodStart: start, periodEnd: end, dueDate: dueDateFor(today, p.lease.dueDay), items: p.items!,
-        meter: { readOn: today, elec: num(p.r.elecCurr), water: num(p.r.waterCurr) },
+        meter: { readOn: today, elec: num(p.r.elecCurr), water: num(p.r.waterCurr) }, carryFrom: p.carry,
       }));
       setIssued([...out]);
     }
@@ -97,12 +99,15 @@ export default function MetersPage() {
       {list.length === 0 && <p className="mt-6 text-muted">ยังไม่มีห้องรายเดือนที่มีผู้เช่า</p>}
 
       <ul className="mt-4 space-y-2">
-        {prepared.map(({ room, last, r, items, error, done }) => (
+        {prepared.map(({ room, last, r, items, error, carry, done }) => (
           <li key={room.id} className={`rounded-2xl p-3 ring-1 ${done ? "bg-black/5 ring-black/5" : "bg-surface ring-black/10"}`}>
             <div className="flex items-baseline justify-between">
               <p className="text-lg font-bold">ห้อง {room.number}</p>
               <p className="text-sm">{done ? "ออกบิลแล้ว" : items ? <b>฿{thb(total(items))}</b> : error ? <span className="text-red-600">{error}</span> : ""}</p>
             </div>
+            {!done && carry.length > 0 && (
+              <p className="mt-1 text-sm text-amber-800">ยกยอดค้างเดิม ฿{thb(carryAmount(carry))} เข้าบิลนี้ ({carry.map((b) => b.billNo).join(", ")})</p>
+            )}
             {!done && (
               <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
                 <label>ไฟ {last ? <span className="text-muted">(ก่อน {last.elec})</span> : ""}

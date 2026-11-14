@@ -29,6 +29,7 @@ export default function BillRow({ bill }: { bill: Bill }) {
   const a = useAction();
   const open = bill.status === "unpaid" || bill.status === "partial";
   const overdue = open && bill.dueDate < todayBkk();
+  const carriedNote = bill.status === "carried" ? ` · ค้าง ฿${thb(balance(bill))} ยกไปบิลถัดไป` : "";
 
   return (
     <li className="rounded-xl bg-surface p-3 ring-1 ring-black/10">
@@ -40,7 +41,7 @@ export default function BillRow({ bill }: { bill: Bill }) {
         <div className="text-right">
           <p className="text-lg font-bold">฿{thb(bill.total)}</p>
           <p className={`text-xs ${overdue ? "text-red-600" : bill.status === "paid" ? "text-emerald-700" : "text-amber-700"}`}>
-            {overdue ? "เกินกำหนด" : BILL_STATUS_TH[bill.status]}{bill.status === "partial" && ` · ค้าง ฿${thb(balance(bill))}`}
+            {overdue ? "เกินกำหนด" : BILL_STATUS_TH[bill.status]}{bill.status === "partial" && ` · ค้าง ฿${thb(balance(bill))}`}{carriedNote}
           </p>
         </div>
       </div>
