@@ -10,7 +10,7 @@ import type { Bill, Booking, Lease, Room, Tenant } from "@/lib/model";
 
 type Data = {
   rooms: Room[]; tenants: Map<string, Tenant>; leases: Lease[];
-  activeLease: Map<string, Lease>; bills: Bill[]; openBills: Bill[]; bookings: Booking[];
+  activeLease: Map<string, Lease>; reservedLease: Map<string, Lease>; bills: Bill[]; openBills: Bill[]; bookings: Booking[];
 };
 const Ctx = createContext<Data | null>(null);
 
@@ -42,6 +42,7 @@ export default function DataProvider({ children }: { children: React.ReactNode }
       tenants: new Map(tenants.map((t) => [t.id, t])),
       leases,
       activeLease: new Map(leases.filter((l) => l.status === "active").map((l) => [l.roomId, l])),
+      reservedLease: new Map(leases.filter((l) => l.status === "reserved").map((l) => [l.roomId, l])),
       bills: [...byId.values()].filter((b) => b.status !== "void").sort((a, b) => b.issueDate.localeCompare(a.issueDate) || b.billNo.localeCompare(a.billNo)),
       openBills: openBills.filter((b) => b.status !== "void"),
       bookings: bookings.filter((b) => b.status !== "cancelled").sort((a, b) => a.checkIn.localeCompare(b.checkIn)),

@@ -1,5 +1,5 @@
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
-import { collection, doc, serverTimestamp, writeBatch } from "firebase/firestore";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from "firebase/auth";
+import { collection, doc, serverTimestamp, setDoc, writeBatch } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { toE164 } from "@/lib/phone";
 
@@ -11,9 +11,18 @@ export async function signIn(phone: string, password: string) {
   await signInWithEmailAndPassword(auth(), loginEmail(phone), password);
 }
 
-export async function signUp(input: { first: string; last: string; phone: string; password: string; property: string }) {
+export async function signUp(input: { first: string; last: string; phone: string; password: string; property: string; invite?: string }) {
   const cred = await createUserWithEmailAndPassword(auth(), loginEmail(input.phone), input.password);
   const uid = cred.user.uid;
+  const name = `${input.first.trim()} ${input.last.trim()}`;
+  await updateProfile(cred.user, { displayName: name }).catch(() => {});
+  if (input.invite?.trim()) {
+    // Staff account: no building of its own; asks to join the owner's building with the invite code.
+    await setDoc(doc(db(), "users", uid), { firstName: input.first.trim(), lastName: input.last.trim(), phone: toE164(input.phone), createdAt: serverTimestamp() });
+    const { redeemInvite } = await import("@/lib/ops");
+    await redeemInvite(input.invite, name);
+    return;
+  }
   const property = doc(collection(db(), "properties"));
   const batch = writeBatch(db());
   batch.set(property, {
@@ -24,7 +33,7 @@ export async function signUp(input: { first: string; last: string; phone: string
   });
   batch.set(doc(db(), "users", uid), {
     firstName: input.first.trim(), lastName: input.last.trim(), phone: toE164(input.phone),
-    propertyId: property.id, createdAt: serverTimestamp(),
+    propertyId: property.id, propertyIds: [property.id], createdAt: serverTimestamp(),
   });
   await batch.commit();
 }

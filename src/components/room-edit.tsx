@@ -4,12 +4,12 @@ import { useState } from "react";
 import { useProperty } from "@/components/property-provider";
 import { Btn, Field, NumField, Select, useAction } from "@/components/ui";
 import { deleteRoom, updateRoom } from "@/lib/ops";
-import { CYCLE_TH, KIND_TH, STATUS_TH, type Room } from "@/lib/model";
+import { CONDITION_TH, CYCLE_TH, KIND_TH, conditionOf, type Room } from "@/lib/model";
 
 export default function RoomEdit({ room, canDelete, onDeleted }: { room: Room; canDelete: boolean; onDeleted: () => void }) {
   const { property } = useProperty();
   const [f, setF] = useState({
-    number: room.number, floor: room.floor, kind: room.kind, billingCycle: room.billingCycle, status: room.status,
+    number: room.number, floor: room.floor, kind: room.kind, billingCycle: room.billingCycle, condition: conditionOf(room),
     rentMonthly: room.rentMonthly as number | "", priceNightly: room.priceNightly as number | "", deposit: room.deposit as number | "", note: room.note,
   });
   const a = useAction();
@@ -23,16 +23,16 @@ export default function RoomEdit({ room, canDelete, onDeleted }: { room: Room; c
         <NumField label="ค่าเช่า/เดือน" value={f.rentMonthly} onChange={(v) => setF({ ...f, rentMonthly: v })} />
         <NumField label="ราคา/คืน" value={f.priceNightly} onChange={(v) => setF({ ...f, priceNightly: v })} />
         <NumField label="ค่าประกัน" value={f.deposit} onChange={(v) => setF({ ...f, deposit: v })} />
-        <Select label="สถานะ" value={f.status} onChange={(v) => setF({ ...f, status: v as Room["status"] })} options={Object.entries(STATUS_TH)} />
+        <Select label="สภาพห้อง" value={f.condition} onChange={(v) => setF({ ...f, condition: v as NonNullable<Room["condition"]> })} options={Object.entries(CONDITION_TH)} />
       </div>
       <Field label="หมายเหตุ" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} />
       <Btn className="w-full" disabled={a.busy} onClick={() => a.run(async () => {
         if (!f.number.trim()) throw new Error("กรุณากรอกเลขห้อง");
-        await updateRoom(property.id, room.id, { ...f, number: f.number.trim(), rentMonthly: f.rentMonthly || 0, priceNightly: f.priceNightly || 0, deposit: f.deposit || 0 });
+        await updateRoom(property.id, room, { ...f, number: f.number.trim(), rentMonthly: f.rentMonthly || 0, priceNightly: f.priceNightly || 0, deposit: f.deposit || 0 });
         return "บันทึกแล้ว";
       })}>บันทึกห้อง</Btn>
       {canDelete && (
-        <Btn kind="danger" className="w-full" disabled={a.busy} onClick={() => confirm(`ลบห้อง ${room.number}?`) && a.run(async () => { await deleteRoom(property.id, room.id); onDeleted(); })}>
+        <Btn kind="danger" className="w-full" disabled={a.busy} onClick={() => confirm(`ลบห้อง ${room.number}?`) && a.run(async () => { await deleteRoom(property.id, room); onDeleted(); })}>
           ลบห้อง
         </Btn>
       )}

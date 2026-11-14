@@ -3,8 +3,9 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc, onSnapshot, type Timestamp } from "firebase/firestore";
+import { doc, onSnapshot, type Timestamp } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import { switchProperty } from "@/lib/ops";
 import type { PlanId } from "@/lib/plans";
 
 export type Property = {
@@ -14,9 +15,13 @@ export type Property = {
   nameEn?: string; preparedBy?: string; payMethod?: string; accountNo?: string; payReference?: string; payNote?: string;
   /** LINE account tenants send meter slips / payment slips to */
   lineId?: string; lineUrl?: string;
+  photo?: string; elecCostPerUnit?: number; waterCostPerUnit?: number;
+  members?: Record<string, "owner" | "assistant" | "viewer">;
 };
 
-const Ctx = createContext<{ uid: string; property: Property } | null>(null);
+export type Role = "owner" | "assistant" | "viewer";
+type Value = { uid: string; property: Property; role: Role; propertyIds: string[] };
+const Ctx = createContext<Value | null>(null);
 
 export function useProperty() {
   const v = useContext(Ctx);
@@ -27,25 +32,50 @@ export function useProperty() {
 /** Guards the app screens: signed-out users go to /login; loads the user's property live. */
 export default function PropertyProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const [value, setValue] = useState<{ uid: string; property: Property } | null>(null);
-  const [missing, setMissing] = useState(false);
+  const [value, setValue] = useState<Value | null>(null);
+  const [missing, setMissing] = useState<"" | "none" | "pending">("");
+  const [others, setOthers] = useState<string[]>([]);
 
   useEffect(() => {
     let stopProperty = () => {};
+    let stopInner = () => {};
     const stopAuth = onAuthStateChanged(auth(), async (user) => {
-      stopProperty();
+      stopProperty(); stopInner();
       if (!user) { router.replace("/login"); return; }
-      const profile = await getDoc(doc(db(), "users", user.uid));
-      const pid = profile.data()?.propertyId as string | undefined;
-      if (!pid) { setMissing(true); return; }
-      stopProperty = onSnapshot(doc(db(), "properties", pid), (snap) => {
-        if (snap.exists()) setValue({ uid: user.uid, property: { id: snap.id, ...(snap.data() as Omit<Property, "id">) } });
+      stopProperty = onSnapshot(doc(db(), "users", user.uid), async (profile) => {
+        const pid = profile.data()?.propertyId as string | undefined;
+        const propertyIds = (profile.data()?.propertyIds as string[] | undefined) ?? (pid ? [pid] : []);
+        setOthers(propertyIds.filter((id) => id !== pid));
+        if (!pid) { setMissing("none"); return; }
+        stopInner();
+        const watch = () => onSnapshot(doc(db(), "properties", pid), (snap) => {
+          if (!snap.exists()) { setMissing("none"); return; }
+          const property = { id: snap.id, ...(snap.data() as Omit<Property, "id">) };
+          const role = property.members?.[user.uid] ?? ((snap.data() as { ownerUid?: string }).ownerUid === user.uid ? "owner" : null);
+          if (!role) { setMissing("pending"); return; }
+          setMissing("");
+          setValue({ uid: user.uid, property, role, propertyIds });
+        }, () => {
+          // Not a member yet (join request waiting): a denied listener stops, so look again shortly.
+          setMissing("pending");
+          const t = setTimeout(() => { stopInner = watch(); }, 5000);
+          stopInner = () => clearTimeout(t);
+        });
+        stopInner = watch();
       });
     });
-    return () => { stopAuth(); stopProperty(); };
+    return () => { stopAuth(); stopProperty(); stopInner(); };
   }, [router]);
 
-  if (missing) return <p>ไม่พบข้อมูลหอพักของบัญชีนี้</p>;
+  if (missing === "pending") return (
+    <div className="space-y-3 p-4">
+      <p>ส่งคำขอเข้าร่วมแล้ว รอเจ้าของหออนุมัติ แล้วหน้านี้จะเปิดให้อัตโนมัติ</p>
+      {others.length > 0 && (
+        <button className="min-h-12 rounded-xl px-4 font-semibold ring-1 ring-black/15" onClick={() => switchProperty(others[0])}>กลับไปอาคารเดิม</button>
+      )}
+    </div>
+  );
+  if (missing === "none") return <p className="p-4">ไม่พบข้อมูลหอพักของบัญชีนี้</p>;
   if (!value) return <p className="text-muted">กำลังโหลด…</p>;
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

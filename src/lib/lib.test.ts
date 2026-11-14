@@ -129,3 +129,89 @@ test("due date is the due day of the month after the billing month (as V3)", () 
   assert.equal(dueDateAfterPeriod("2026-12", 5), "2027-01-05");
   assert.equal(dueDateAfterPeriod("2027-01", 31), "2027-02-28");
 });
+
+import { tenancyLeaseIds } from "./carry.ts";
+import { aging, buildAlerts, collectionByPeriod, forecast, periodsBack, reminderDraft, revenueMix, utilityMargin, vacancyDraft } from "./insights.ts";
+
+const bill = (o: Record<string, unknown>) => ({ id: "x", roomId: "r1", roomNumber: "101", tenantName: "สมศรี", period: "2026-10", dueDate: "2026-11-05",
+  items: [{ kind: "rent", amount: 3500, qty: 1 }, { kind: "elec", amount: 400, qty: 50 }], total: 3900, paid: 0, status: "unpaid", ...o });
+
+test("tenancy follows room transfers back", () => {
+  const leases = [{ id: "L1" }, { id: "L2", transferredFrom: "L1" }, { id: "L3", transferredFrom: "L2" }, { id: "X" }];
+  assert.deepEqual([...tenancyLeaseIds(leases, "L3")].sort(), ["L1", "L2", "L3"]);
+  assert.deepEqual([...tenancyLeaseIds(leases, "X")], ["X"]);
+});
+
+test("collection rate, aging, revenue mix and utility margin", () => {
+  const bills = [bill({ id: "a", paid: 3900, status: "paid" }), bill({ id: "b", roomId: "r2", paid: 1000, status: "partial" }),
+    bill({ id: "c", period: "2026-11", items: [{ kind: "rent", amount: 3500, qty: 1 }, { kind: "prev_balance", amount: 2900, qty: 1 }], total: 6400, dueDate: "2026-12-05" })];
+  const [oct] = collectionByPeriod(bills, ["2026-10"]);
+  assert.equal(oct.billed, 7800); assert.equal(oct.collected, 4900);
+  const ag = aging(bills, new Date("2026-11-20T12:00:00"));
+  assert.equal(ag["1-30"], 2900); assert.equal(ag.not_due, 6400);
+  assert.deepEqual(revenueMix(bills, ["2026-10", "2026-11"]).map((x) => x.kind), ["rent", "elec"]);
+  const u = utilityMargin(bills, "2026-10", 4.7, 15);
+  assert.equal(u.elecUnits, 100); assert.equal(u.elecBilled, 800); assert.equal(u.elecCost, 470);
+});
+
+test("forecast counts running leases and vacant potential", () => {
+  const f = forecast([{ id: "l", roomId: "r1", tenantId: "t", status: "active", endDate: null, rent: 3500, acFee: 500, internet: 0, parking: 0 }],
+    [{ id: "r1", number: "101", kind: "monthly", status: "occupied", rentMonthly: 3500 }, { id: "r2", number: "102", kind: "monthly", status: "vacant", rentMonthly: 4000 }]);
+  assert.equal(f.monthly, 4000); assert.equal(f.rows[0].current, 48000); assert.equal(f.rows[4].full, 480000);
+});
+
+test("alerts: overdue first, lease ending, billing not done, vacancy", () => {
+  const a = buildAlerts({ bills: [bill({ dueDate: "2026-09-01" })], today: "2026-11-26", billedThisPeriod: 0, monthlyLeases: 2, daysLeft: null,
+    leases: [{ id: "l", roomId: "r1", tenantId: "t", status: "active", endDate: "2026-12-10", rent: 0, acFee: 0, internet: 0, parking: 0 }],
+    rooms: [{ id: "r1", number: "101", kind: "monthly", status: "occupied", rentMonthly: 0 }, { id: "r2", number: "102", kind: "monthly", status: "vacant", rentMonthly: 0 }],
+    maintenance: [{ id: "m", roomNumber: "101", problem: "แอร์", status: "open", createdOn: "2026-11-01" }] });
+  assert.equal(a[0].level, "urgent"); assert.match(a[0].title, /ห้อง 101 ค้าง/);
+  assert.ok(a.some((x) => x.key === "billing")); assert.ok(a.some((x) => x.key === "vacant")); assert.ok(a.some((x) => x.key === "maint-m"));
+});
+
+test("drafts", () => {
+  assert.equal(reminderDraft({ roomNumber: "101", tenantName: "คุณ สมศรี", period: "2026-10", dueDate: "2026-11-05", balance: 2900 }, 3, { name: "วิไลเพลส" }).tone, "gentle");
+  assert.equal(reminderDraft({ roomNumber: "101", tenantName: "", period: "2026-10", dueDate: "2026-11-05", balance: 2900 }, 45, { name: "ว" }).tone, "formal");
+  assert.match(vacancyDraft({ number: "102", floor: "1", rentMonthly: 4000, deposit: 0 }, { name: "ว", address: "", phone: "+66625055446", lineId: "@x" }), /0625055446 · LINE @x/);
+  assert.deepEqual(periodsBack("2027-01", 3), ["2026-11", "2026-12", "2027-01"]);
+});
+
+import { parseImport } from "./import.ts";
+test("excel import parses rooms, tenants and meters; reports bad lines", () => {
+  const { rows, errors } = parseImport([
+    ["101", "1", "รายเดือน", "3,500", 0, 7000, "สมชาย", "081-234-5678", "2026-01-01", 8, 18, 5, 1234, 456],
+    ["102", "", "", 3500, "", "", "", "", "", "", "", "", "", ""],
+    ["", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+    ["101", "1", "รายเดือน", 1, 0, 0],
+    ["201", "2", "โรงแรม", 1, 0, 0],
+    ["202", "2", "รายวัน", 0, 600, 0, "นาย ก"],
+    ["301", "3", "รายเดือน", 1, 0, 0, "", "", "", "", "", "", 5, ""],
+    ["999", "9", "รายเดือน", 1, 0, 0],
+  ], ["999"]);
+  assert.equal(rows.length, 2);
+  assert.deepEqual(rows[0].tenant, { fullName: "สมชาย", phone: "0812345678", startDate: "2026-01-01", elecRate: 8, waterRate: 18, dueDay: 5 });
+  assert.equal(rows[0].rentMonthly, 3500);
+  assert.deepEqual(rows[0].meter, { elec: 1234, water: 456 });
+  assert.equal(rows[1].kind, "monthly");
+  assert.equal(rows[1].floor, "1");
+  assert.equal(errors.length, 5);
+  assert.match(errors[0], /แถว 5: ห้อง 101 ซ้ำ/);
+});
+
+import { createHmac } from "node:crypto";
+import { validLineSignature, reminderKind, billText } from "./line.ts";
+test("LINE signature, reminder days and bill text", () => {
+  const body = '{"events":[]}';
+  const sig = createHmac("sha256", "s3cret").update(body).digest("base64");
+  assert.equal(validLineSignature(body, sig, "s3cret"), true);
+  assert.equal(validLineSignature(body, sig, "other"), false);
+  assert.equal(validLineSignature(body, null, "s3cret"), false);
+  assert.equal(reminderKind("2026-11-10", "2026-11-07"), "due_soon");
+  assert.equal(reminderKind("2026-11-10", "2026-11-11"), "overdue");
+  assert.equal(reminderKind("2026-11-10", "2026-11-17"), "overdue");
+  assert.equal(reminderKind("2026-11-10", "2026-11-12"), null);
+  const t = billText({ roomNumber: "101", period: "2026-10", total: 4200, paid: 200, dueDate: "2026-11-05", publicToken: "abc" }, "วิไล", "https://x.app");
+  assert.match(t, /ยอดชำระ 4,000 บาท/);
+  assert.match(t, /5 พ\.ย\. 69/);
+  assert.match(t, /https:\/\/x\.app\/b\/abc/);
+});

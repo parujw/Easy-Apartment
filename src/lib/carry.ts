@@ -4,10 +4,24 @@
 
 type CarryBill = { id: string; leaseId: string | null; period: string; status: string; total: number; paid: number };
 
-export function carryOverBills<T extends CarryBill>(bills: T[], leaseId: string | null, beforePeriod: string): T[] {
-  if (!leaseId) return [];
+export function carryOverBills<T extends CarryBill>(bills: T[], lease: string | Set<string> | null, beforePeriod: string): T[] {
+  if (!lease) return [];
+  const ids = typeof lease === "string" ? new Set([lease]) : lease;
   return bills.filter((b) =>
-    b.leaseId === leaseId && b.period < beforePeriod && (b.status === "unpaid" || b.status === "partial") && b.total - b.paid > 0);
+    b.leaseId !== null && ids.has(b.leaseId) && b.period < beforePeriod && (b.status === "unpaid" || b.status === "partial") && b.total - b.paid > 0);
+}
+
+/** All lease ids of one tenancy: follow transferredFrom back (room moves), like V3 tenancy.ts. */
+export function tenancyLeaseIds(leases: { id: string; transferredFrom?: string }[], leaseId: string | null): Set<string> {
+  const ids = new Set<string>();
+  const byId = new Map(leases.map((l) => [l.id, l]));
+  let cur = leaseId ? byId.get(leaseId) : undefined;
+  if (leaseId) ids.add(leaseId);
+  while (cur?.transferredFrom && !ids.has(cur.transferredFrom)) {
+    ids.add(cur.transferredFrom);
+    cur = byId.get(cur.transferredFrom);
+  }
+  return ids;
 }
 
 export const carryAmount = (bills: CarryBill[]) =>

@@ -12,7 +12,8 @@ export default function AuthForm({ initialMode }: { initialMode: "login" | "sign
   const [mode, setMode] = useState(initialMode);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [f, setF] = useState({ first: "", last: "", phone: "", password: "", property: "" });
+  const [f, setF] = useState({ first: "", last: "", phone: "", password: "", property: "", invite: "" });
+  const [staff, setStaff] = useState(false);
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value });
 
   async function submit(e: React.FormEvent) {
@@ -25,9 +26,9 @@ export default function AuthForm({ initialMode }: { initialMode: "login" | "sign
       } else {
         if (!f.first.trim() || !f.last.trim()) throw new Error("กรุณากรอกชื่อและนามสกุล");
         if (f.password.length < 8) throw new Error("รหัสผ่านอย่างน้อย 8 ตัวอักษร");
-        await signUp(f);
+        await signUp(staff ? f : { ...f, invite: "" });
       }
-      router.push("/rooms");
+      router.push("/overview");
     } catch (err) {
       setError(authError(err));
     } finally {
@@ -52,8 +53,19 @@ export default function AuthForm({ initialMode }: { initialMode: "login" | "sign
               autoComplete={mode === "signup" ? "new-password" : "current-password"} />
           </label>
           {mode === "signup" && (
+            <label className="mt-3 flex min-h-12 items-center gap-2">
+              <input type="checkbox" className="size-5" checked={staff} onChange={(e) => setStaff(e.target.checked)} />
+              ฉันเป็นผู้ช่วย / พนักงาน มีรหัสเชิญจากเจ้าของ
+            </label>
+          )}
+          {mode === "signup" && !staff && (
             <label className="mt-3 block">ชื่อหอพัก / โรงแรม
               <input className={input} value={f.property} onChange={set("property")} />
+            </label>
+          )}
+          {mode === "signup" && staff && (
+            <label className="mt-3 block">รหัสเชิญ 8 ตัว
+              <input className={input} value={f.invite} onChange={set("invite")} autoCapitalize="characters" />
             </label>
           )}
       </>

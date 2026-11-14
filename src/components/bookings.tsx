@@ -92,7 +92,7 @@ export function IcalSync({ room }: { room: Room }) {
     <div className="space-y-2">
       <Field label="ลิงก์ปฏิทิน Airbnb (iCal)" placeholder="https://www.airbnb.com/calendar/ical/…" value={url} onChange={(e) => setUrl(e.target.value)} />
       <Btn kind="ghost" className="w-full" disabled={a.busy || !url} onClick={() => a.run(async () => {
-        if (url !== room.icalUrl) await updateRoom(property.id, room.id, { icalUrl: url });
+        if (url !== room.icalUrl) await updateRoom(property.id, room, { icalUrl: url });
         const res = await fetch(`/api/ical?url=${encodeURIComponent(url)}`);
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "ดึงปฏิทินไม่สำเร็จ");

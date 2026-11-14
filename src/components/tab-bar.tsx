@@ -4,12 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const tabs = [
+  { href: "/overview", label: "ภาพรวม" },
   { href: "/rooms", label: "ห้อง" },
   { href: "/meters", label: "ออกบิล" },
   { href: "/more", label: "เงิน & อื่นๆ" },
 ] as const;
 
-// Three tabs only (requirement: fewer screens, one-hand use)
+// Four tabs only (requirement: fewer screens, one-hand use)
 export default function TabBar() {
   const path = usePathname();
   return (

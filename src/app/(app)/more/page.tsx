@@ -7,7 +7,8 @@ import { auth, db } from "@/lib/firebase";
 import { useLive } from "@/lib/hooks";
 import { useProperty } from "@/components/property-provider";
 import { useData } from "@/components/data-provider";
-import { Btn, Card, Field, NumField, Select, useAction } from "@/components/ui";
+import { Btn, Field, NumField, Select, useAction } from "@/components/ui";
+import { BuildingSection, ExpensesSection, ImportSection, LineSection, ListsSection, MaintenanceHistory, TeamSection } from "@/components/more-sections";
 import { addRooms, roomDefaults, setMaintenanceStatus, updateProperty } from "@/lib/ops";
 import { promptPayPayload } from "@/lib/promptpay";
 import { parseRoomNumbers } from "@/lib/rooms";
@@ -225,10 +226,15 @@ function AccountSection() {
 }
 
 export default function MorePage() {
+  const { role } = useProperty();
+  const owner = role === "owner";
   return (
     <div className="space-y-3">
       <h1 className="text-xl font-bold">เงิน &amp; อื่นๆ</h1>
+      {role === "viewer" && <p className="rounded-xl bg-sky-50 p-3 text-sm text-sky-900">บัญชีนี้ดูข้อมูลได้อย่างเดียว</p>}
+      <ListsSection />
       <MonthSummary />
+      <ExpensesSection />
       <Section title="เอกสารสำหรับพิมพ์">
         <div className="grid gap-2">
           <a href="/print/slips" target="_blank" className="flex min-h-12 items-center rounded-xl px-4 ring-1 ring-black/15">ใบจดมิเตอร์ (ทุกห้อง)</a>
@@ -238,11 +244,15 @@ export default function MorePage() {
         </div>
       </Section>
       <MaintenanceSection />
-      <RoomsSection />
-      <SettingsSection />
+      <MaintenanceHistory />
+      {role !== "viewer" && <RoomsSection />}
+      {owner && <ImportSection />}
+      {owner && <SettingsSection />}
+      <BuildingSection />
+      {owner && <TeamSection />}
+      <LineSection />
       <PlanSection />
       <AccountSection />
-      <Card className="text-sm text-muted">ส่งบิลทาง LINE อัตโนมัติ: เร็วๆ นี้ · ตอนนี้ใช้ปุ่ม “ส่งบิล” แล้วเลือก LINE</Card>
     </div>
   );
 }

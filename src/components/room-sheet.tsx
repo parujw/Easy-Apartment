@@ -5,12 +5,12 @@ import { useProperty } from "@/components/property-provider";
 import { useData } from "@/components/data-provider";
 import { Btn, Sheet, useAction } from "@/components/ui";
 import BillRow from "@/components/bill-row";
-import { MoveInForm, TenantCard } from "@/components/tenant-forms";
+import { MoveInForm, ReservationCard, TenantCard } from "@/components/tenant-forms";
 import ManualBill from "@/components/manual-bill";
 import { BookingList, IcalSync, NewBooking } from "@/components/bookings";
 import RoomEdit from "@/components/room-edit";
-import { updateRoom } from "@/lib/ops";
-import { CYCLE_TH, KIND_TH, STATUS_TH, type Room } from "@/lib/model";
+import { setCondition } from "@/lib/ops";
+import { CONDITION_TH, CYCLE_TH, KIND_TH, STATUS_TH, conditionOf, type Room, type RoomCondition } from "@/lib/model";
 
 type Panel = "main" | "movein" | "bill" | "booking" | "edit";
 
@@ -28,7 +28,8 @@ export default function RoomSheet({ room, onClose }: { room: Room | null; onClos
 
 function Body({ room, panel, setPanel, close }: { room: Room; panel: Panel; setPanel: (p: Panel) => void; close: () => void }) {
   const { property } = useProperty();
-  const { activeLease, tenants, bills, leases } = useData();
+  const { activeLease, reservedLease, tenants, bills, leases } = useData();
+  const reserved = reservedLease.get(room.id);
   const a = useAction();
   const lease = activeLease.get(room.id);
   const tenant = lease ? tenants.get(lease.tenantId) : undefined;
@@ -48,12 +49,15 @@ function Body({ room, panel, setPanel, close }: { room: Room; panel: Panel; setP
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <span className="rounded-full bg-black/5 px-3 py-1">{nightly && room.status === "occupied" ? "เข้าพักอยู่" : STATUS_TH[room.status]}</span>
         <span className="text-muted">บิล{CYCLE_TH[room.billingCycle]}</span>
-        {room.status === "cleaning" && (
-          <Btn kind="ghost" className="ml-auto" disabled={a.busy}
-            onClick={() => a.run(async () => { await updateRoom(property.id, room.id, { status: lease ? "occupied" : "vacant" }); })}>
-            ทำความสะอาดเสร็จ
-          </Btn>
-        )}
+      </div>
+      <div className="flex flex-wrap gap-2" role="group" aria-label="สภาพห้อง">
+        {(Object.entries(CONDITION_TH) as [RoomCondition, string][]).map(([k, label]) => (
+          <button key={k} disabled={a.busy} aria-pressed={conditionOf(room) === k}
+            className={`min-h-10 rounded-full px-3 text-sm ring-1 ${conditionOf(room) === k ? "bg-brand text-white ring-brand" : "ring-black/15"}`}
+            onClick={() => conditionOf(room) !== k && a.run(async () => { await setCondition(property.id, room, k); return `ห้อง ${room.number}: ${label}`; })}>
+            {label}
+          </button>
+        ))}
       </div>
       {a.view}
 
@@ -78,8 +82,15 @@ function Body({ room, panel, setPanel, close }: { room: Room; panel: Panel; setP
           <h3 className="font-semibold">ผู้เช่า</h3>
           <TenantCard key={lease.id} room={room} tenant={tenant} lease={lease} />
         </section>
-      ) : (
-        <Btn className="w-full" onClick={() => setPanel("movein")}>+ เพิ่มผู้เช่า</Btn>
+      ) : reserved ? null : (
+        <Btn className="w-full" onClick={() => setPanel("movein")}>+ เพิ่มผู้เช่า / จองห้อง</Btn>
+      )}
+
+      {!nightly && reserved && (
+        <section className="space-y-2">
+          <h3 className="font-semibold">จองไว้</h3>
+          <ReservationCard key={reserved.id} room={room} tenant={tenants.get(reserved.tenantId)} lease={reserved} />
+        </section>
       )}
 
       {history.length > 0 && (

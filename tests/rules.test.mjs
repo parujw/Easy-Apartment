@@ -104,3 +104,49 @@ test("owner can edit invoice/LINE fields but still not the subscription", async 
   await assertFails(updateDoc(doc(db(A), "properties", PID), { nameEn: "X", paidUntil: days(999) }));
   await assertFails(updateDoc(doc(db(B), "properties", PID), { nameEn: "hijack" }));
 });
+
+test("roles: viewer reads only, assistant writes but cannot delete or edit settings", async () => {
+  await seed(days(30));
+  const V = "userV", AS = "userAS";
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await updateDoc(doc(ctx.firestore(), "properties", PID), { [`members.${V}`]: "viewer", [`members.${AS}`]: "assistant" });
+    await setDoc(doc(ctx.firestore(), "properties", PID, "rooms", "r1"), { number: "101" });
+  });
+  await assertSucceeds(getDoc(doc(db(V), "properties", PID, "rooms", "r1")));
+  await assertFails(setDoc(doc(db(V), "properties", PID, "rooms", "r2"), { number: "102" }));
+  await assertSucceeds(setDoc(doc(db(AS), "properties", PID, "rooms", "r2"), { number: "102" }));
+  const { deleteDoc } = await import("firebase/firestore");
+  await assertFails(deleteDoc(doc(db(AS), "properties", PID, "rooms", "r2")));
+  await assertFails(updateDoc(doc(db(AS), "properties", PID), { name: "x" }));
+});
+
+test("audit log is append-only and signed by the actor", async () => {
+  await seed(days(30));
+  const d = db(A);
+  const log = doc(d, "properties", PID, "auditLogs", "l1");
+  await assertFails(setDoc(log, { actorUid: B, action: "x" }));
+  await assertSucceeds(setDoc(log, { actorUid: A, action: "bill.edit" }));
+  await assertFails(updateDoc(log, { action: "changed" }));
+  const { deleteDoc } = await import("firebase/firestore");
+  await assertFails(deleteDoc(log));
+});
+
+test("assistant joins only with a valid invite, owner approves by adding the member", async () => {
+  await seed(days(30));
+  const C = "userC";
+  await assertFails(setDoc(doc(db(B), "invites", "CODE12345"), { propertyId: PID, role: "assistant", expiresAt: days(7) }));
+  await assertSucceeds(setDoc(doc(db(A), "invites", "CODE12345"), { propertyId: PID, role: "assistant", expiresAt: days(7) }));
+  await assertFails(setDoc(doc(db(C), "joinRequests", `${PID}_${C}`), { propertyId: PID, uid: C, code: "WRONGCODE", role: "assistant" }));
+  await assertFails(setDoc(doc(db(C), "joinRequests", `${PID}_${C}`), { propertyId: PID, uid: C, code: "CODE12345", role: "viewer" }));
+  await assertSucceeds(setDoc(doc(db(C), "joinRequests", `${PID}_${C}`), { propertyId: PID, uid: C, code: "CODE12345", role: "assistant" }));
+  await assertFails(updateDoc(doc(db(C), "properties", PID), { [`members.${C}`]: "assistant" }));
+  await assertSucceeds(updateDoc(doc(db(A), "properties", PID), { [`members.${C}`]: "assistant" }));
+  await assertSucceeds(getDoc(doc(db(C), "properties", PID)));
+  await assertFails(updateDoc(doc(db(A), "properties", PID), { [`members.${A}`]: "viewer" })); // owner can't demote self
+});
+
+test("expired invite is rejected", async () => {
+  await seed(days(30));
+  await env.withSecurityRulesDisabled(async (ctx) => setDoc(doc(ctx.firestore(), "invites", "OLDCODE99"), { propertyId: PID, role: "assistant", expiresAt: days(-1) }));
+  await assertFails(setDoc(doc(db("userD"), "joinRequests", `${PID}_userD`), { propertyId: PID, uid: "userD", code: "OLDCODE99", role: "assistant" }));
+});
