@@ -11,12 +11,11 @@ Firebase project: `easy-apartment`
 1. Firebase console → Authentication → Sign-in method → เปิด **Email/Password**
    (ระบบใช้เบอร์โทรเป็น username โดยแปลงเป็นอีเมลภายใน เช่น `66812345678@phone.easy-apartment.app`)
 2. Firebase console → Firestore Database → สร้างฐานข้อมูล (region `asia-southeast1` ใกล้ไทยที่สุด)
-3. Project settings → Your apps → เพิ่ม Web app แล้วคัดลอกค่า config ใส่ `.env.local` ตาม `.env.example`
+3. ค่า config ของ Web app ใส่ไว้ใน `src/lib/firebase.ts` แล้ว (เป็นค่าสาธารณะ ข้อมูลถูกป้องกันด้วย `firestore.rules`)
 4. Deploy security rules: `npx firebase login` แล้ว `npx firebase deploy --only firestore`
 5. `npm install` แล้ว `npm run dev`
 
-พัฒนาในเครื่องโดยไม่แตะข้อมูลจริง: ใส่ `NEXT_PUBLIC_USE_EMULATORS=1` และ project id `demo-easy-apartment` ใน `.env.local`
-แล้วรัน `npx firebase emulators:start --only auth,firestore --project demo-easy-apartment`
+พัฒนาในเครื่องโดยไม่แตะข้อมูลจริง: คัดลอก `.env.example` เป็น `.env.local` แล้วรัน `npx firebase emulators:start --only auth,firestore --project demo-easy-apartment`
 
 ## คำสั่ง
 
