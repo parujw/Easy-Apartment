@@ -515,47 +515,12 @@
 
 /* -------------------------------- ปุ่มลอย -------------------------------- */
 
-.print-bar {
-  position: fixed;
-  top: 12pt;
-  right: 12pt;
-  left: 12pt;
-  display: flex;
-  justify-content: space-between;
-  gap: 8pt;
-  z-index: 10;
-}
-
-.print-bar .back {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999pt;
-  background: #fff;
-  padding: 9pt 18pt;
-  color: var(--ink);
-  font-weight: 700;
-  text-decoration: none;
-  box-shadow: 0 4pt 14pt -6pt rgb(0 0 0 / 0.5);
-}
-
-.print-bar button {
-  border: 0;
-  border-radius: 999pt;
-  background: var(--brand);
-  padding: 9pt 20pt;
-  color: #fff;
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-  box-shadow: 0 4pt 14pt -6pt rgb(0 0 0 / 0.5);
-}
-
-/* ------------------------------ ดูบนจอ (ไม่พิมพ์) ----------------------------- */
+/* แถบปุ่มด้านบนใช้หน้าตาเดียวกับแอป: components/print-bar.tsx (Tailwind) */
 
 @media screen {
-  body:has(.slips) {
-    background: #e4e0da;
-    padding: 56pt 0 16pt;
+  .print-screen:has(.slips) {
+    background: var(--background);
+    padding: 80px 0 16pt;
   }
 
   .page {
@@ -573,6 +538,17 @@
     padding: 12mm 8mm;
   }
 }
+
+/* มือถือ: แผ่น A4 ย่อให้พอดีจอ (ตอนพิมพ์กลับเป็นขนาดจริงตาม @page) และฟอร์มไม่ล้นจอ */
+@media screen and (max-width: 840px) {
+  .slips { width: auto; }
+  .blank-setup { width: auto; margin-left: 16px; margin-right: 16px; }
+  .page { zoom: 0.97; }
+}
+@media screen and (max-width: 640px) { .page { zoom: 0.76; } }
+@media screen and (max-width: 520px) { .page { zoom: 0.6; } }
+@media screen and (max-width: 420px) { .page { zoom: 0.47; } }
+@media screen and (max-width: 360px) { .page { zoom: 0.43; } }
 
 /* --------------------------------- พิมพ์จริง -------------------------------- */
 

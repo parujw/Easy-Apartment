@@ -329,45 +329,12 @@
 
 /* ---------------------------------- ปุ่มพิมพ์ --------------------------------- */
 
-.print-bar {
-  position: fixed;
-  top: 12pt;
-  right: 12pt;
-  left: 12pt;
-  display: flex;
-  justify-content: space-between;
-  gap: 8pt;
-  z-index: 10;
-}
-
-.print-bar .back {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999pt;
-  background: #fff;
-  padding: 9pt 18pt;
-  color: var(--ink);
-  font-weight: 700;
-  text-decoration: none;
-  box-shadow: 0 4pt 14pt -6pt rgb(0 0 0 / 0.5);
-}
-
-.print-bar button {
-  border: 0;
-  border-radius: 999pt;
-  background: var(--brand);
-  padding: 9pt 20pt;
-  color: #fff;
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-  box-shadow: 0 4pt 14pt -6pt rgb(0 0 0 / 0.5);
-}
+/* แถบปุ่มด้านบนใช้หน้าตาเดียวกับแอป: components/print-bar.tsx (Tailwind) */
 
 @media screen {
-  body:has(.sheet) {
-    background: #e4e0da;
-    padding: 16px 0;
+  .print-screen:has(.sheet) {
+    background: var(--background);
+    padding: 80px 0 16px;
   }
 
   .sheet {
@@ -385,8 +352,8 @@
 
   @media (max-width: 30rem) {
     /* แถบปุ่มลอยอยู่ จอแคบๆ มันทับชื่ออาคารพอดี เว้นที่ให้พ้นก่อน */
-    body:has(.sheet) {
-      padding-top: 64pt;
+    .print-screen:has(.sheet) {
+      padding-top: 80px;
     }
 
     .sheet {

@@ -1,11 +1,13 @@
 @import "tailwindcss";
 
 :root {
+  --app-font: "Noto Sans Thai", "Sukhumvit Set", Tahoma, system-ui, sans-serif;
   --background: #f7f7f5;
   --surface: #ffffff;
   --foreground: #1c1c1a;
   --muted: #6b6b66;
   --brand: #0f766e;
+  --app-brand: #0f766e; /* unaffected by the print pages, which redefine --brand inside their sheets */
 }
 
 @media (prefers-color-scheme: dark) {
@@ -15,6 +17,7 @@
     --foreground: #ededea;
     --muted: #a3a39d;
     --brand: #2dd4bf;
+    --app-brand: #2dd4bf;
   }
 }
 
@@ -29,6 +32,6 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: "Noto Sans Thai", "Sukhumvit Set", Tahoma, system-ui, sans-serif;
+  font-family: var(--app-font);
   font-size: 16px;
 }
