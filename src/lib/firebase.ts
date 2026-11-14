@@ -1,6 +1,6 @@
 import { getApp, getApps, initializeApp } from "firebase/app";
 import { connectAuthEmulator, getAuth } from "firebase/auth";
-import { connectFirestoreEmulator, getFirestore } from "firebase/firestore";
+import { connectFirestoreEmulator, getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
 
 // Web app config of the "easy-apartment" Firebase project. These values are public by design:
 // data is protected by firestore.rules, not by hiding this config. NEXT_PUBLIC_FIREBASE_* overrides
@@ -19,6 +19,11 @@ const useEmulators = process.env.NEXT_PUBLIC_USE_EMULATORS === "1"; // local dev
 export const app = () => {
   if (getApps().length) return getApp();
   const a = initializeApp(config);
+  // Keep a copy of the data on the phone: screens open from it at once and keep working on a weak
+  // signal; changes sync when the connection is back. Falls back to memory where storage is blocked.
+  if (typeof window !== "undefined") {
+    try { initializeFirestore(a, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) }); } catch { /* already set up */ }
+  }
   if (useEmulators) {
     connectAuthEmulator(getAuth(a), "http://127.0.0.1:9099", { disableWarnings: true });
     connectFirestoreEmulator(getFirestore(a), "127.0.0.1", 8080);

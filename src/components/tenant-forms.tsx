@@ -85,6 +85,7 @@ export function TenantCard({ room, tenant, lease }: { room: Room; tenant: Tenant
         <p className="font-semibold">ย้าย {tenant?.fullName} จากห้อง {room.number}</p>
         <Select label="ไปห้อง" value={target} onChange={(v) => { setTarget(v); setNewRent(rooms.find((r) => r.id === v)?.rentMonthly ?? ""); }}
           options={[["", "— เลือกห้องว่าง —"], ...vacant.map((r) => [r.id, `ห้อง ${r.number}`] as [string, string])]} />
+        {!vacant.length && <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-950">ไม่มีห้องรายเดือนที่ว่างอยู่ — ต้องมีผู้เช่าย้ายออกก่อน หรือเพิ่มห้องใหม่</p>}
         <NumField label="ค่าเช่าห้องใหม่" value={newRent} onChange={setNewRent} />
         <p className="text-sm text-muted">เงินประกัน ฿{thb(lease.deposit)} และยอดค้าง ฿{thb(owed)} ตามไปห้องใหม่ บิลเก่ายังเป็นของห้องเดิม</p>
         <div className="grid grid-cols-2 gap-2">

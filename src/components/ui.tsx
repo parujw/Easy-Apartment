@@ -10,13 +10,16 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    // Freeze the page behind the sheet; otherwise iOS scrolls the page instead of the sheet and it feels stuck.
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { window.removeEventListener("keydown", onKey); document.body.style.overflow = prev; };
   }, [open, onClose]);
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
       <div role="dialog" aria-modal="true" aria-label={title}
-        className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-t-3xl bg-background p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]"
+        className="max-h-[92dvh] w-full max-w-xl overflow-y-auto overscroll-contain rounded-t-3xl bg-background p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]"
         onClick={(e) => e.stopPropagation()}>
         <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-black/15" />
         <div className="mb-3 flex items-center justify-between gap-2">
@@ -76,14 +79,27 @@ export function useAction() {
   async function run(fn: () => Promise<string | void>) {
     setBusy(true);
     setMsg(null);
+    const work = fn();
+    // On a weak signal a save can wait for the server for a long time. The change is already on screen
+    // (Firestore applies it locally), so free the buttons after a few seconds and finish in the background.
+    let slow = false;
+    const timer = setTimeout(() => {
+      slow = true;
+      setBusy(false);
+      setMsg({ ok: true, text: "สัญญาณช้า กำลังส่งข้อมูลขึ้นระบบ… ใช้งานต่อได้เลย" });
+    }, 6000);
     try {
-      const text = await fn();
-      if (text) { setMsg({ ok: true, text }); toast(text); }
+      const text = await work;
+      if (slow) setMsg(null);
+      if (text) { setMsg({ ok: true, text }); toast(text); } else if (slow) toast("บันทึกขึ้นระบบแล้ว");
       return true;
     } catch (e) {
-      setMsg({ ok: false, text: e instanceof Error ? e.message : "เกิดข้อผิดพลาด" });
+      const text = e instanceof Error ? e.message : "เกิดข้อผิดพลาด";
+      setMsg({ ok: false, text });
+      if (slow) toast(`บันทึกไม่สำเร็จ: ${text}`);
       return false;
     } finally {
+      clearTimeout(timer);
       setBusy(false);
     }
   }
