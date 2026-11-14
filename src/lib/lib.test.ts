@@ -53,3 +53,43 @@ test("pricing, intro once, and early renewal extends from expiry", () => {
   assert.equal(suggestPlan(17, true), "pro");
   assert.equal(suggestPlan(150, false), "business");
 });
+
+import { allowedCalendarUrl, parseIcal } from "./ical.ts";
+
+test("iCal URL allow-list matches exact domains only", () => {
+  assert.ok(allowedCalendarUrl("https://www.airbnb.com/calendar/ical/123.ics?s=abc"));
+  assert.ok(allowedCalendarUrl("https://admin.booking.com/hotel/ical/x.ics"));
+  assert.equal(allowedCalendarUrl("https://airbnb.evil.com/x.ics"), null);
+  assert.equal(allowedCalendarUrl("https://evilairbnb.com/x.ics"), null);
+  assert.equal(allowedCalendarUrl("http://www.airbnb.com/x.ics"), null);
+  assert.equal(allowedCalendarUrl("https://www.airbnb.com:8443/x.ics"), null);
+  assert.equal(allowedCalendarUrl("not a url"), null);
+});
+
+test("Airbnb iCal feed is parsed into date ranges", () => {
+  const feed = [
+    "BEGIN:VCALENDAR", "BEGIN:VEVENT", "DTEND;VALUE=DATE:20261205", "DTSTART;VALUE=DATE:20261201",
+    "UID:1418fb94e984-abc@airbnb.com", "DESCRIPTION:Reservation URL: https://www.airbnb.com/hosting/\r\n reservations/details/HMXYZ",
+    "SUMMARY:Reserved", "END:VEVENT", "BEGIN:VEVENT", "DTEND;VALUE=DATE:20261220", "DTSTART;VALUE=DATE:20261218",
+    "UID:x2@airbnb.com", "SUMMARY:Airbnb (Not available)", "END:VEVENT", "END:VCALENDAR",
+  ].join("\r\n");
+  assert.deepEqual(parseIcal(feed), [
+    { uid: "1418fb94e984-abc@airbnb.com", start: "2026-12-01", end: "2026-12-05", summary: "Reserved" },
+    { uid: "x2@airbnb.com", start: "2026-12-18", end: "2026-12-20", summary: "ปิดห้อง (Airbnb)" },
+  ]);
+});
+
+import { parseRoomNumbers } from "./rooms.ts";
+import { dueDateFor, monthRange } from "./dates.ts";
+
+test("room number ranges expand", () => {
+  assert.deepEqual(parseRoomNumbers("101-103, 201 202"), ["101", "102", "103", "201", "202"]);
+  assert.deepEqual(parseRoomNumbers("A1, 101-101"), ["A1", "101"]);
+});
+
+test("due date and month range", () => {
+  assert.equal(dueDateFor("2026-11-01", 5), "2026-11-05");
+  assert.equal(dueDateFor("2026-11-14", 5), "2026-12-05");
+  assert.equal(dueDateFor("2026-12-20", 5), "2027-01-05");
+  assert.deepEqual(monthRange("2027-02"), { start: "2027-02-01", end: "2027-02-28" });
+});
