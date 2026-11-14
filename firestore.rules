@@ -1,0 +1,87 @@
+rules_version = '2';
+
+// Easy Apartment — Firestore security rules
+// Layout:
+//   users/{uid}                         profile of the signed-in owner/assistant
+//   properties/{pid}                    one per hotel/dormitory; members map {uid: 'owner'|'assistant'}
+//   properties/{pid}/{collection}/{id}  rooms, tenants, leases, bookings, meterReadings, bills, payments, expenses, maintenance
+//   properties/{pid}/roomNights/{roomId_yyyy-mm-dd}   one doc per booked night → no double booking
+//   properties/{pid}/counters/{name_yyyymm}           running document numbers
+//   properties/{pid}/topups/{id}        subscription payments (server only)
+//   publicBills/{token}                 bill snapshot for the link sent to tenants (get by token only)
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function prop(pid) { return get(/databases/$(database)/documents/properties/$(pid)).data; }
+    function isMember(pid) { return signedIn() && request.auth.uid in prop(pid).members; }
+    function isOwner(pid) { return signedIn() && prop(pid).members[request.auth.uid] == 'owner'; }
+    // Writable until the end of paidUntil day + 3 days grace; afterwards read-only.
+    function isActive(pid) {
+      let p = prop(pid);
+      return p.paidUntil != null && request.time < p.paidUntil + duration.value(4, 'd');
+    }
+
+    match /users/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+
+    match /properties/{pid} {
+      allow read: if signedIn() && request.auth.uid in resource.data.members;
+
+      // Sign-up: the creator becomes the only owner; subscription fields start empty.
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['name', 'phone', 'address', 'promptpayId', 'accountName',
+             'docPrefix', 'plan', 'paidUntil', 'introUsed', 'ownerUid', 'members', 'createdAt'])
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.members.keys().hasOnly([request.auth.uid])
+        && request.resource.data.members[request.auth.uid] == 'owner'
+        && request.resource.data.plan == 'pro'
+        && request.resource.data.paidUntil == null
+        && request.resource.data.introUsed == false;
+
+      // Owners edit branding only; plan / paidUntil / introUsed / members change on the server.
+      allow update: if signedIn()
+        && resource.data.members[request.auth.uid] == 'owner'
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['name', 'phone', 'address', 'promptpayId', 'accountName', 'docPrefix']);
+
+      allow delete: if false;
+
+      match /{coll}/{id} {
+        allow read: if isMember(pid);
+      }
+
+      match /{coll}/{id} {
+        allow create, update: if coll in ['rooms', 'tenants', 'leases', 'bookings', 'meterReadings',
+                                          'bills', 'payments', 'expenses', 'maintenance']
+          && isMember(pid) && isActive(pid);
+        allow delete: if coll in ['rooms', 'tenants', 'leases', 'bookings', 'meterReadings',
+                                  'bills', 'payments', 'expenses', 'maintenance']
+          && isOwner(pid) && isActive(pid);
+      }
+
+      // A night can be taken once: create only, never overwritten. Cancel = delete.
+      match /roomNights/{night} {
+        allow create: if isMember(pid) && isActive(pid);
+        allow delete: if isMember(pid) && isActive(pid);
+      }
+
+      match /counters/{name} {
+        allow create: if isMember(pid) && isActive(pid) && request.resource.data.value == 1;
+        allow update: if isMember(pid) && isActive(pid) && request.resource.data.value == resource.data.value + 1;
+      }
+
+      // topups: read via the generic read rule above; writes only through the Admin SDK.
+    }
+
+    match /publicBills/{token} {
+      allow get: if token.size() >= 24;
+      allow list: if false;
+      allow create, update: if token.size() >= 24
+        && isMember(request.resource.data.propertyId) && isActive(request.resource.data.propertyId);
+      allow delete: if isMember(resource.data.propertyId);
+    }
+  }
+}

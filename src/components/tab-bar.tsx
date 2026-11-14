@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 
 const tabs = [
   { href: "/rooms", label: "ห้อง" },
-  { href: "/meters", label: "จดมิเตอร์ & ออกบิล" },
+  { href: "/meters", label: "ออกบิล" },
   { href: "/more", label: "เงิน & อื่นๆ" },
 ] as const;
 

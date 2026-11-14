@@ -1,9 +1,13 @@
-import Link from "next/link";
-import { supabaseServer } from "@/lib/supabase/server";
-import { currentProperty } from "@/lib/property";
+"use client";
 
-type Room = { id: string; number: string; floor: string; kind: string; status: string };
-type Bill = { room_id: string; status: string; due_date: string; total: number; paid: number };
+import { useEffect, useState } from "react";
+import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { useProperty } from "@/components/property-provider";
+import { daysLeftTs, todayBkk } from "@/lib/dates";
+
+type Room = { id: string; number: string; floor: string; kind: "monthly" | "daily" | "airbnb"; status: string };
+type Bill = { roomId: string; status: string; dueDate: string; issueDate: string; total: number; paid: number };
 
 const thb = (n: number) => n.toLocaleString("th-TH");
 
@@ -12,33 +16,38 @@ function tone(room: Room, bill: Bill | undefined, today: string) {
   if (room.status === "vacant") return { label: "ว่าง", cls: "bg-black/5 text-muted" };
   if (!bill) return { label: "ยังไม่ออกบิล", cls: "bg-surface ring-1 ring-black/10" };
   if (bill.status === "paid") return { label: "จ่ายแล้ว", cls: "bg-emerald-100 text-emerald-900" };
-  if (bill.due_date < today) return { label: "เกินกำหนด", cls: "bg-red-100 text-red-900" };
+  if (bill.dueDate < today) return { label: "เกินกำหนด", cls: "bg-red-100 text-red-900" };
   return { label: "รอจ่าย", cls: "bg-amber-100 text-amber-900" };
 }
 
-export default async function RoomsPage() {
-  const property = await currentProperty();
-  if (!property) {
-    return <p>ไม่พบข้อมูลหอพัก <Link className="text-brand underline" href="/login?mode=signup">สมัครใช้งาน</Link></p>;
-  }
-  const sb = await supabaseServer();
-  const [{ data: rooms }, { data: bills }] = await Promise.all([
-    sb.from("rooms").select("id, number, floor, kind, status").order("number"),
-    sb.from("bills").select("room_id, status, due_date, total, paid, issue_date").neq("status", "void").order("issue_date", { ascending: false }),
-  ]);
-  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
+export default function RoomsPage() {
+  const { property } = useProperty();
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [bills, setBills] = useState<Bill[]>([]);
+
+  useEffect(() => {
+    const base = ["properties", property.id] as const;
+    const a = onSnapshot(query(collection(db(), ...base, "rooms"), orderBy("number")),
+      (s) => setRooms(s.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Room, "id">) }))));
+    const b = onSnapshot(query(collection(db(), ...base, "bills"), orderBy("issueDate", "desc")),
+      (s) => setBills(s.docs.map((d) => d.data() as Bill).filter((x) => x.status !== "void")));
+    return () => { a(); b(); };
+  }, [property.id]);
+
+  const today = todayBkk();
   const latest = new Map<string, Bill>();
-  for (const b of (bills ?? []) as Bill[]) if (!latest.has(b.room_id)) latest.set(b.room_id, b);
+  for (const b of bills) if (!latest.has(b.roomId)) latest.set(b.roomId, b);
   const open = [...latest.values()].filter((b) => b.status !== "paid");
-  const due = open.reduce((s, b) => s + Number(b.total) - Number(b.paid), 0);
-  const floors = Map.groupBy((rooms ?? []) as Room[], (r) => r.floor || "-");
+  const due = open.reduce((s, b) => s + b.total - b.paid, 0);
+  const floors = Map.groupBy(rooms, (r) => r.floor || "-");
+  const left = daysLeftTs(property.paidUntil);
 
   return (
     <>
-      <header className="flex items-baseline justify-between">
+      <header className="flex items-baseline justify-between gap-2">
         <h1 className="text-xl font-bold">{property.name}</h1>
-        <span className={`text-sm ${property.daysLeft <= 3 ? "text-red-600" : "text-muted"}`}>
-          {property.paid_until ? `ใช้ได้อีก ${property.daysLeft} วัน` : "ยังไม่ได้เปิดใช้งาน"}
+        <span className={`text-sm ${property.paidUntil && left <= 3 ? "text-red-600" : "text-muted"}`}>
+          {property.paidUntil ? `ใช้ได้อีก ${left} วัน` : "ยังไม่ได้เปิดใช้งาน"}
         </span>
       </header>
 
@@ -53,9 +62,7 @@ export default async function RoomsPage() {
         </div>
       </section>
 
-      {(rooms ?? []).length === 0 && (
-        <p className="mt-8 text-muted">ยังไม่มีห้อง — เพิ่มห้องได้ที่แท็บ “เงิน &amp; อื่นๆ” → ตั้งค่า</p>
-      )}
+      {rooms.length === 0 && <p className="mt-8 text-muted">ยังไม่มีห้อง — เพิ่มห้องได้ที่แท็บ “เงิน &amp; อื่นๆ”</p>}
 
       {[...floors].map(([floor, list]) => (
         <section key={floor} className="mt-6">
