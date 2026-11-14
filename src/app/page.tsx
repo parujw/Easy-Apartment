@@ -1,69 +1,45 @@
-import Image from "next/image";
+import Link from "next/link";
+import { PLANS, INTRO_PRICE, type PlanId } from "@/lib/plans";
+
+const order: PlanId[] = ["starter", "pro", "business"];
+const thb = (n: number) => n.toLocaleString("th-TH");
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+    <main className="mx-auto w-full max-w-3xl px-4 py-10">
+      <h1 className="text-3xl font-bold">Easy Apartment</h1>
+      <p className="mt-2 text-muted">จัดการห้องเช่ารายเดือน ห้องรายวัน และ Airbnb จบในหน้าเดียว ส่งบิลทาง LINE ได้ทันที</p>
+
+      <div className="mt-6 rounded-2xl bg-brand/10 p-5">
+        <p className="text-lg font-semibold">
+          เดือนแรก <span className="text-muted line-through">{thb(PLANS.pro.month)}</span>{" "}
+          <span className="text-brand">{INTRO_PRICE} บาท</span> ใช้ Pro ได้ครบทุกฟีเจอร์ 30 วัน
+        </p>
+        <Link href="/login?mode=signup" className="mt-4 inline-flex min-h-12 items-center rounded-xl bg-brand px-6 font-semibold text-white">
+          สมัครใช้งาน
+        </Link>
+      </div>
+
+      <div className="mt-8 grid gap-4 sm:grid-cols-3">
+        {order.map((id) => {
+          const p = PLANS[id];
+          const featured = id === "pro";
+          return (
+            <div key={id} className={`rounded-2xl bg-surface p-5 ${featured ? "ring-2 ring-brand" : "ring-1 ring-black/10"}`}>
+              {featured && <span className="rounded-full bg-brand px-3 py-1 text-xs font-semibold text-white">ขายดี</span>}
+              <h2 className="mt-2 text-xl font-bold">{p.name}</h2>
+              <p className="mt-1 text-3xl font-bold">{thb(p.month)}<span className="text-base font-normal text-muted"> /30 วัน</span></p>
+              <p className="text-sm text-muted">ตกวันละ {Math.round(p.month / 30)} บาท · รายปี {thb(p.year)} (ฟรี 1 เดือน)</p>
+              <ul className="mt-4 space-y-1 text-sm">
+                <li>สูงสุด {p.maxRooms} ห้อง</li>
+                <li>{p.dailyRooms ? "ห้องรายเดือน + รายวัน + Airbnb" : "ห้องรายเดือนเท่านั้น"}</li>
+                <li>ส่งบิลทาง LINE {thb(p.lineQuota)} ข้อความ/เดือน</li>
+              </ul>
+            </div>
+          );
+        })}
+      </div>
+      <p className="mt-6 text-sm text-muted">มีบัญชีแล้ว? <Link href="/login" className="text-brand underline">เข้าสู่ระบบ</Link></p>
+    </main>
   );
 }
