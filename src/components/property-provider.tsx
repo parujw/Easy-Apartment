@@ -10,6 +10,10 @@ import type { PlanId } from "@/lib/plans";
 export type Property = {
   id: string; name: string; plan: PlanId; paidUntil: Timestamp | null; introUsed: boolean;
   promptpayId: string; accountName: string; phone: string; address: string; docPrefix: string;
+  /** invoice header/footer and payment box — same fields as the V3 invoice */
+  nameEn?: string; preparedBy?: string; payMethod?: string; accountNo?: string; payReference?: string; payNote?: string;
+  /** LINE account tenants send meter slips / payment slips to */
+  lineId?: string; lineUrl?: string;
 };
 
 const Ctx = createContext<{ uid: string; property: Property } | null>(null);

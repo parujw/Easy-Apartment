@@ -11,7 +11,7 @@ import { shareBill, billLink } from "@/components/bill-row";
 import { issueBill } from "@/lib/ops";
 import { meterBill, total } from "@/lib/billing";
 import { carryAmount, carryOverBills } from "@/lib/carry";
-import { addDays, dueDateFor, monthRange, monthTh, periodOf, todayBkk } from "@/lib/dates";
+import { addDays, dueDateAfterPeriod, monthRange, monthTh, periodOf, todayBkk } from "@/lib/dates";
 import { thb, type Bill, type MeterReading } from "@/lib/model";
 
 type Row = { elecPrev: string; elecCurr: string; waterPrev: string; waterCurr: string };
@@ -71,8 +71,8 @@ export default function MetersPage() {
     for (const p of ready) {
       const tenant = tenants.get(p.lease.tenantId);
       out.push(await issueBill(property, {
-        room: p.room, tenantName: tenant?.fullName ?? "", leaseId: p.lease.id, bookingId: null,
-        periodStart: start, periodEnd: end, dueDate: dueDateFor(today, p.lease.dueDay), items: p.items!,
+        room: p.room, tenantName: tenant?.fullName ?? "", tenantPhone: tenant?.phone ?? "", leaseId: p.lease.id, bookingId: null,
+        periodStart: start, periodEnd: end, dueDate: dueDateAfterPeriod(period, p.lease.dueDay), items: p.items!,
         meter: { readOn: today, elec: num(p.r.elecCurr), water: num(p.r.waterCurr) }, carryFrom: p.carry,
       }));
       setIssued([...out]);
@@ -95,6 +95,10 @@ export default function MetersPage() {
         <input type="month" aria-label="รอบบิล" className="min-h-12 rounded-xl border border-black/15 bg-surface px-2" value={period} onChange={(e) => setPeriod(e.target.value)} />
       </div>
       <p className="mt-1 text-sm text-muted">รอบ {monthTh(period)} · กรอกเลขมิเตอร์ปัจจุบัน กด Enter เพื่อไปช่องถัดไป</p>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <a href={`/print/slips?cycle=${period.replace("-", "")}`} target="_blank" className="flex min-h-12 items-center justify-center rounded-xl px-3 text-center text-sm font-semibold ring-1 ring-black/15">พิมพ์ใบจดมิเตอร์</a>
+        <a href="/print/slips/blank" target="_blank" className="flex min-h-12 items-center justify-center rounded-xl px-3 text-center text-sm font-semibold ring-1 ring-black/15">ใบจดมิเตอร์เปล่า</a>
+      </div>
 
       {list.length === 0 && <p className="mt-6 text-muted">ยังไม่มีห้องรายเดือนที่มีผู้เช่า</p>}
 

@@ -18,7 +18,8 @@ export type Lease = {
   internet: number; acFee: number; parking: number; dueDay: number; status: "active" | "ended";
 };
 
-export type MeterReading = { id: string; roomId: string; readOn: string; elec: number; water: number };
+/** period = billing month "YYYY-MM" the reading belongs to (older imported readings: month of readOn) */
+export type MeterReading = { id: string; roomId: string; readOn: string; period?: string; elec: number; water: number };
 
 /** carried = its unpaid balance moved into a later bill of the same lease (see lib/carry.ts) */
 export type BillStatus = "unpaid" | "partial" | "paid" | "void" | "carried";

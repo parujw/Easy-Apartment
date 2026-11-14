@@ -93,7 +93,12 @@ function Body({ room, panel, setPanel, close }: { room: Room; panel: Panel; setP
         {(lease || nightly) && <Btn kind="ghost" onClick={() => setPanel("bill")}>ออกบิลเอง</Btn>}
         <Btn kind="ghost" onClick={() => setPanel("edit")}>แก้ไขห้อง</Btn>
       </div>
-      {!nightly && lease && <p className="text-xs text-muted">บิลรายเดือนพร้อมค่าน้ำค่าไฟ ออกได้ที่แท็บ “ออกบิล”</p>}
+      {!nightly && lease && (
+        <>
+          <a href={`/print/slips?room=${encodeURIComponent(room.number)}`} target="_blank" className="flex min-h-12 items-center justify-center rounded-xl text-sm font-semibold ring-1 ring-black/15">พิมพ์ใบจดมิเตอร์ห้องนี้</a>
+          <p className="text-xs text-muted">บิลรายเดือนพร้อมค่าน้ำค่าไฟ ออกได้ที่แท็บ “ออกบิล”</p>
+        </>
+      )}
     </div>
   );
 }

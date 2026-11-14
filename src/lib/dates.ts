@@ -35,5 +35,13 @@ export function dueDateFor(fromIso: string, dueDay: number): string {
   return due.toISOString().slice(0, 10);
 }
 
+/** Due date of a billing month: `dueDay` of the FOLLOWING month (November rent due 5 December), like V3. */
+export function dueDateAfterPeriod(period: string, dueDay: number): string {
+  const [y, m] = period.split("-").map(Number);
+  const last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  const day = Math.min(Math.max(dueDay || 5, 1), last);
+  return new Date(Date.UTC(y, m, day)).toISOString().slice(0, 10);
+}
+
 export const monthTh = (period: string) =>
   new Date(period + "-01T00:00:00Z").toLocaleDateString("th-TH", { timeZone: "UTC", month: "long", year: "numeric" });

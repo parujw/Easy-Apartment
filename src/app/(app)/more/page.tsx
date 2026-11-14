@@ -147,6 +147,9 @@ function SettingsSection() {
   const [f, setF] = useState({
     name: property.name, phone: property.phone.replace(/^\+66/, "0"), address: property.address,
     promptpayId: property.promptpayId, accountName: property.accountName, docPrefix: property.docPrefix,
+    nameEn: property.nameEn ?? "", preparedBy: property.preparedBy ?? "", payMethod: property.payMethod ?? "",
+    accountNo: property.accountNo ?? "", payReference: property.payReference ?? "", payNote: property.payNote ?? "",
+    lineId: property.lineId ?? "", lineUrl: property.lineUrl ?? "",
   });
   const a = useAction();
   return (
@@ -158,8 +161,19 @@ function SettingsSection() {
         <Field label="PromptPay (เบอร์มือถือหรือเลขบัตร)" inputMode="numeric" value={f.promptpayId} onChange={(e) => setF({ ...f, promptpayId: e.target.value })} />
         <Field label="ชื่อบัญชีผู้รับเงิน" value={f.accountName} onChange={(e) => setF({ ...f, accountName: e.target.value })} />
         <Field label="อักษรนำหน้าเลขใบแจ้งหนี้" value={f.docPrefix} onChange={(e) => setF({ ...f, docPrefix: e.target.value.toUpperCase() })} />
+        <p className="pt-2 text-sm font-semibold">หัวและท้ายใบแจ้งหนี้</p>
+        <Field label="ชื่อภาษาอังกฤษ (หัวใบ เช่น WILAI PLACE)" value={f.nameEn} onChange={(e) => setF({ ...f, nameEn: e.target.value })} />
+        <Field label="ผู้จัดทำ (ท้ายใบ)" placeholder="ผู้จัดการ" value={f.preparedBy} onChange={(e) => setF({ ...f, preparedBy: e.target.value })} />
+        <Field label="ช่องทางชำระ (เช่น PromptPay / KBank)" value={f.payMethod} onChange={(e) => setF({ ...f, payMethod: e.target.value })} />
+        <Field label="เลขบัญชีที่แสดงบนใบ" value={f.accountNo} onChange={(e) => setF({ ...f, accountNo: e.target.value })} />
+        <Field label="เลขที่อ้างอิง (เว้นว่าง = ใช้เลขบิล)" value={f.payReference} onChange={(e) => setF({ ...f, payReference: e.target.value })} />
+        <Field label="ข้อความใต้ช่องชำระ" placeholder="กรุณาส่งสลิปหลังโอนผ่าน LINE" value={f.payNote} onChange={(e) => setF({ ...f, payNote: e.target.value })} />
+        <p className="pt-2 text-sm font-semibold">LINE ที่ผู้เช่าส่งใบจดมิเตอร์/สลิปกลับมา</p>
+        <Field label="LINE ID (เช่น @933yhkou)" value={f.lineId} onChange={(e) => setF({ ...f, lineId: e.target.value })} />
+        <Field label="ลิงก์เพิ่มเพื่อน (https://lin.ee/…)" value={f.lineUrl} onChange={(e) => setF({ ...f, lineUrl: e.target.value })} />
         <Btn className="w-full" disabled={a.busy} onClick={() => a.run(async () => {
           if (f.promptpayId.trim()) promptPayPayload(f.promptpayId); // throws a Thai message if the ID is invalid
+          if (f.lineUrl && !/^https:\/\//.test(f.lineUrl)) throw new Error("ลิงก์ LINE ต้องขึ้นต้นด้วย https://");
           await updateProperty(property.id, { ...f, name: f.name.trim(), promptpayId: f.promptpayId.replace(/\D/g, "") });
           return "บันทึกแล้ว บิลที่ออกต่อจากนี้ใช้ข้อมูลใหม่";
         })}>บันทึก</Btn>
@@ -215,6 +229,14 @@ export default function MorePage() {
     <div className="space-y-3">
       <h1 className="text-xl font-bold">เงิน &amp; อื่นๆ</h1>
       <MonthSummary />
+      <Section title="เอกสารสำหรับพิมพ์">
+        <div className="grid gap-2">
+          <a href="/print/slips" target="_blank" className="flex min-h-12 items-center rounded-xl px-4 ring-1 ring-black/15">ใบจดมิเตอร์ (ทุกห้อง)</a>
+          <a href="/print/slips/blank" target="_blank" className="flex min-h-12 items-center rounded-xl px-4 ring-1 ring-black/15">ใบจดมิเตอร์เปล่า</a>
+          <a href="/print/notices" target="_blank" className="flex min-h-12 items-center rounded-xl px-4 ring-1 ring-black/15">ใบเตือนค้างชำระติดประตู</a>
+          <p className="text-sm text-muted">ใบแจ้งหนี้ A4: แตะห้อง → บิล → ปุ่ม “พิมพ์”</p>
+        </div>
+      </Section>
       <MaintenanceSection />
       <RoomsSection />
       <SettingsSection />

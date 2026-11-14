@@ -114,3 +114,18 @@ test("carry-over takes only this lease's earlier unpaid balances", () => {
 test("billed revenue excludes carried-over debt", () => {
   assert.equal(billedRevenue([{ items: [{ kind: "rent", amount: 3500 }, { kind: "prev_balance", amount: 1400 }, { kind: "discount", amount: -100 }] }]), 3400);
 });
+
+import { meterUnits } from "./billing.ts";
+import { dueDateAfterPeriod } from "./dates.ts";
+
+test("meter rollover counts the wrap, implausible jumps are rejected", () => {
+  assert.equal(meterUnits(7986, 8059), 73);
+  assert.equal(meterUnits(99990, 20), 30);
+  assert.throws(() => meterUnits(500, 400));
+});
+
+test("due date is the due day of the month after the billing month (as V3)", () => {
+  assert.equal(dueDateAfterPeriod("2026-11", 5), "2026-12-05");
+  assert.equal(dueDateAfterPeriod("2026-12", 5), "2027-01-05");
+  assert.equal(dueDateAfterPeriod("2027-01", 31), "2027-02-28");
+});

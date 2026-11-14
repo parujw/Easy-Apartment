@@ -57,6 +57,9 @@ export default function RoomsPage() {
           <p className="text-lg font-bold">{rooms.filter((r) => r.status === "vacant").length}/{rooms.length}</p>
         </button>
       </section>
+      {overdue.length > 0 && (
+        <a href="/print/notices" target="_blank" className="mt-2 flex min-h-12 items-center justify-center rounded-xl text-sm font-semibold text-red-700 ring-1 ring-red-200">พิมพ์ใบเตือนค้างชำระติดประตู ({new Set(overdue.map((b) => b.roomId)).size} ห้อง)</a>
+      )}
       {filter !== "all" && <button className="mt-2 min-h-10 text-sm text-brand" onClick={() => setFilter("all")}>แสดงทุกห้อง</button>}
 
       {rooms.length === 0 && <p className="mt-8 text-muted">ยังไม่มีห้อง — เพิ่มห้องได้ที่แท็บ “เงิน &amp; อื่นๆ” → ห้องพัก</p>}

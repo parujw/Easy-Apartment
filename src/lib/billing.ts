@@ -35,19 +35,31 @@ function extras(e: Extras): BillItem[] {
   return out;
 }
 
+/**
+ * Units used between two readings. A meter that wraps (99990 → 00020) counts 30 units, like V3;
+ * a jump that is implausible as a wrap (more than half the dial) is a reading mistake.
+ */
+export function meterUnits(previous: number, current: number, digits = 5): number {
+  if (current >= previous) return round2(current - previous);
+  const rollover = 10 ** digits;
+  const units = current + rollover - previous;
+  if (units > rollover / 2) throw new Error("เลขมิเตอร์น้อยกว่าครั้งก่อน");
+  return round2(units);
+}
+
 export function meterBill(input: {
   rent: number;
   elecPrev: number; elecCurr: number; elecRate: number;
   waterPrev: number; waterCurr: number; waterRate: number;
 } & Extras): BillItem[] {
-  if (input.elecCurr < input.elecPrev) throw new Error("เลขมิเตอร์ไฟน้อยกว่าครั้งก่อน");
-  if (input.waterCurr < input.waterPrev) throw new Error("เลขมิเตอร์น้ำน้อยกว่าครั้งก่อน");
+  let eu: number, wu: number;
+  try { eu = meterUnits(input.elecPrev, input.elecCurr); } catch { throw new Error("เลขมิเตอร์ไฟน้อยกว่าครั้งก่อน"); }
+  try { wu = meterUnits(input.waterPrev, input.waterCurr); } catch { throw new Error("เลขมิเตอร์น้ำน้อยกว่าครั้งก่อน"); }
   const items: BillItem[] = [];
   if (input.rent) items.push(item("rent", "ค่าเช่าห้อง", 1, input.rent));
-  const eu = round2(input.elecCurr - input.elecPrev);
-  const wu = round2(input.waterCurr - input.waterPrev);
-  if (eu) items.push(item("elec", `ค่าไฟ ${input.elecPrev}→${input.elecCurr}`, eu, input.elecRate));
-  if (wu) items.push(item("water", `ค่าน้ำ ${input.waterPrev}→${input.waterCurr}`, wu, input.waterRate));
+  // label format as on V3 invoices: "ค่าไฟ (7986 → 8059)"
+  if (eu) items.push(item("elec", `ค่าไฟ (${input.elecPrev} → ${input.elecCurr})`, eu, input.elecRate));
+  if (wu) items.push(item("water", `ค่าน้ำ (${input.waterPrev} → ${input.waterCurr})`, wu, input.waterRate));
   return [...items, ...extras(input)];
 }
 

@@ -97,3 +97,10 @@ test("subscription top-ups are server-only", async () => {
   await seed(days(30));
   await assertFails(setDoc(doc(db(A), "properties", PID, "topups", "t1"), { amount: 890, status: "paid" }));
 });
+
+test("owner can edit invoice/LINE fields but still not the subscription", async () => {
+  await seed(days(30));
+  await assertSucceeds(updateDoc(doc(db(A), "properties", PID), { nameEn: "WILAI PLACE", accountNo: "xxx", lineId: "@x", payNote: "n" }));
+  await assertFails(updateDoc(doc(db(A), "properties", PID), { nameEn: "X", paidUntil: days(999) }));
+  await assertFails(updateDoc(doc(db(B), "properties", PID), { nameEn: "hijack" }));
+});

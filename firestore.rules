@@ -45,7 +45,8 @@ service cloud.firestore {
       allow update: if signedIn()
         && resource.data.members[request.auth.uid] == 'owner'
         && request.resource.data.diff(resource.data).affectedKeys()
-             .hasOnly(['name', 'phone', 'address', 'promptpayId', 'accountName', 'docPrefix']);
+             .hasOnly(['name', 'phone', 'address', 'promptpayId', 'accountName', 'docPrefix',
+                       'nameEn', 'preparedBy', 'payMethod', 'accountNo', 'payReference', 'payNote', 'lineId', 'lineUrl']);
 
       allow delete: if false;
 

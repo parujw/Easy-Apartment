@@ -55,12 +55,18 @@ export default function BillRow({ bill }: { bill: Bill }) {
       </details>
 
       {open && !paying && (
-        <div className="mt-3 grid grid-cols-2 gap-2">
+        <div className="mt-3 grid grid-cols-3 gap-2">
           <Btn onClick={() => setPaying(true)}>รับชำระ</Btn>
           <Btn kind="ghost" onClick={() => a.run(() => shareBill(bill))}>ส่งบิล</Btn>
+          <Btn kind="ghost" onClick={() => window.open(`/print/invoice/${bill.publicToken}`, "_blank")}>พิมพ์</Btn>
         </div>
       )}
-      {!open && <Btn kind="ghost" className="mt-3 w-full" onClick={() => a.run(() => shareBill(bill))}>ส่งลิงก์บิล/ใบเสร็จ</Btn>}
+      {!open && bill.status !== "void" && (
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <Btn kind="ghost" onClick={() => a.run(() => shareBill(bill))}>ส่งลิงก์บิล</Btn>
+          <Btn kind="ghost" onClick={() => window.open(`/print/invoice/${bill.publicToken}`, "_blank")}>พิมพ์</Btn>
+        </div>
+      )}
 
       {paying && (
         <div className="mt-3 space-y-3">

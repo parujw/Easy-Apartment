@@ -34,15 +34,25 @@ export type NewBill = {
   room: Pick<Room, "id" | "number">; tenantName: string; leaseId: string | null; bookingId: string | null;
   periodStart: string; periodEnd: string; dueDate: string; items: BillItem[]; note?: string;
   meter?: { readOn: string; elec: number; water: number };
+  tenantPhone?: string;
   /** earlier open bills of this lease whose balance is included as a "ยอดค้างยกมา" item */
   carryFrom?: Bill[];
 };
 
-function publicCopy(p: Property, b: Omit<Bill, "id">) {
+/** What the public bill/invoice page shows — a snapshot, like a printed invoice. */
+export function publicProperty(p: Property) {
+  return {
+    name: p.name, nameEn: p.nameEn ?? "", phone: p.phone, address: p.address, promptpayId: p.promptpayId,
+    accountName: p.accountName, accountNo: p.accountNo ?? "", payMethod: p.payMethod ?? "", payReference: p.payReference ?? "",
+    payNote: p.payNote ?? "", preparedBy: p.preparedBy ?? "",
+  };
+}
+
+function publicCopy(p: Property, b: Omit<Bill, "id">, tenantPhone = "") {
   return {
     propertyId: p.id,
-    property: { name: p.name, phone: p.phone, address: p.address, promptpayId: p.promptpayId, accountName: p.accountName },
-    roomNumber: b.roomNumber, tenantName: b.tenantName, billNo: b.billNo, invoiceNo: b.invoiceNo,
+    property: publicProperty(p),
+    roomNumber: b.roomNumber, tenantName: b.tenantName, tenantPhone, paidOn: null, billNo: b.billNo, invoiceNo: b.invoiceNo,
     periodStart: b.periodStart, periodEnd: b.periodEnd, issueDate: b.issueDate, dueDate: b.dueDate,
     items: b.items, total: b.total, paid: b.paid, status: b.status,
   };
@@ -61,8 +71,8 @@ export async function issueBill(p: Property, n: NewBill): Promise<Bill> {
   const billRef = doc(col(p.id, "bills"));
   const batch = writeBatch(db());
   batch.set(billRef, bill);
-  batch.set(doc(db(), "publicBills", bill.publicToken), publicCopy(p, bill));
-  if (n.meter) batch.set(ref(p.id, "meterReadings", `${n.room.id}_${n.meter.readOn}`), { roomId: n.room.id, ...n.meter });
+  batch.set(doc(db(), "publicBills", bill.publicToken), publicCopy(p, bill, n.tenantPhone));
+  if (n.meter) batch.set(ref(p.id, "meterReadings", `${n.room.id}_${n.meter.readOn}`), { roomId: n.room.id, period: bill.period, ...n.meter });
   if (n.bookingId) batch.update(ref(p.id, "bookings", n.bookingId), { billId: billRef.id });
   for (const old of n.carryFrom ?? []) {
     batch.update(ref(p.id, "bills", old.id), { status: "carried", carriedTo: billRef.id, carriedStatus: old.status });
@@ -86,7 +96,7 @@ export async function receivePayment(p: Property, billId: string, amount: number
       billId, roomId: b.roomId, roomNumber: b.roomNumber, receiptNo, paidOn: todayBkk(), amount, method, bankRef,
     } satisfies Omit<Payment, "id">);
     tx.update(billRef, { paid, status });
-    tx.update(doc(db(), "publicBills", b.publicToken), { paid, status });
+    tx.update(doc(db(), "publicBills", b.publicToken), { paid, status, paidOn: todayBkk() });
   });
   return receiptNo;
 }
@@ -222,7 +232,10 @@ export async function setMaintenanceStatus(pid: string, m: Maintenance, status: 
 
 // ───────────── Settings ─────────────
 
-export function updateProperty(pid: string, data: Partial<Pick<Property, "name" | "phone" | "address" | "promptpayId" | "accountName" | "docPrefix">>) {
+export const PROPERTY_EDITABLE = ["name", "phone", "address", "promptpayId", "accountName", "docPrefix",
+  "nameEn", "preparedBy", "payMethod", "accountNo", "payReference", "payNote", "lineId", "lineUrl"] as const;
+
+export function updateProperty(pid: string, data: Partial<Pick<Property, (typeof PROPERTY_EDITABLE)[number]>>) {
   if (data.docPrefix !== undefined && !/^[A-Z0-9]{1,6}$/.test(data.docPrefix)) throw new Error("อักษรนำหน้าเอกสาร: A-Z หรือ 0-9 ไม่เกิน 6 ตัว");
   return updateDoc(doc(db(), "properties", pid) as DocumentReference, data);
 }
