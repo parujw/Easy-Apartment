@@ -76,3 +76,24 @@ export function nightlyBill(input: { checkIn: string; checkOut: string; nightlyR
 }
 
 export const total = (items: BillItem[]) => round2(items.reduce((s, i) => s + i.amount, 0));
+
+/** "ค่าไฟ (7986 → 8059)" → { base: "ค่าไฟ", prev: 7986, curr: 8059 }; null when the label has no readings. */
+export function parseMeterLabel(label: string): { base: string; prev: number; curr: number } | null {
+  const m = /^(.*?)\s*\(\s*(-?[\d.,]+)\s*(?:→|->)\s*(-?[\d.,]+)\s*\)\s*$/.exec(label);
+  if (!m) return null;
+  const prev = Number(m[2].replace(/,/g, "")), curr = Number(m[3].replace(/,/g, ""));
+  return Number.isFinite(prev) && Number.isFinite(curr) ? { base: m[1].trim(), prev, curr } : null;
+}
+
+/** Meter line rebuilt from edited readings: label, units (with rollover) and amount stay consistent. */
+export function meterItem(kind: "elec" | "water", base: string, prev: number, curr: number, rate: number): BillItem {
+  let units: number;
+  try { units = meterUnits(prev, curr); } catch { throw new Error(`${base}: เลขหลังน้อยกว่าเลขก่อน`); }
+  return item(kind, `${base} (${prev} → ${curr})`, units, rate);
+}
+
+/** Fixed-amount line (rent, services, discount, other) with qty × unit price. */
+export function amountItem(kind: BillItem["kind"], label: string, qty: number, unitPrice: number): BillItem {
+  const price = kind === "discount" ? -Math.abs(unitPrice) : unitPrice;
+  return item(kind, label, qty, price);
+}

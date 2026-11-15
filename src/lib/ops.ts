@@ -98,14 +98,26 @@ export async function issueBill(p: Property, n: NewBill): Promise<Bill> {
  * Fix an issued bill (wrong meter number, forgotten discount). Bill number stays.
  * The total can't drop below what was already received (V3 bill-edit rule).
  */
-export async function editBill(p: Property, bill: Bill, items: BillItem[], note = bill.note) {
+export async function editBill(p: Property, bill: Bill, items: BillItem[], note = bill.note ?? "", meter?: { elec?: number; water?: number }) {
   if (bill.status === "void" || bill.status === "carried") throw new Error("บิลนี้แก้ไม่ได้ (ยกเลิกหรือยกยอดไปแล้ว)");
   const total = sumItems(items);
   if (total < bill.paid) throw new Error(`ยอดใหม่ ฿${total.toLocaleString("th-TH")} ต่ำกว่าที่รับเงินแล้ว ฿${bill.paid.toLocaleString("th-TH")} — ลบใบเสร็จที่รับเกินก่อน`);
   const status = statusFor(total, bill.paid);
   const batch = writeBatch(db());
   batch.update(ref(p.id, "bills", bill.id), { items, total, status, note });
-  batch.update(doc(db(), "publicBills", bill.publicToken), { items, total, status });
+  // merge: also recreates the tenant's bill page if it was ever missing (paidOn/tenantPhone kept)
+  batch.set(doc(db(), "publicBills", bill.publicToken), { propertyId: p.id, property: publicProperty(p), items, total, status }, { merge: true });
+  // Corrected "after" readings also fix the saved meter reading, so next month's "before" is right.
+  if (meter && (meter.elec !== undefined || meter.water !== undefined)) {
+    const { getDocs, query, where } = await import("firebase/firestore");
+    const snap = await getDocs(query(col(p.id, "meterReadings"), where("roomId", "==", bill.roomId)));
+    const mine = snap.docs.filter((d) => ((d.data().period as string | undefined) ?? String(d.data().readOn).slice(0, 7)) === bill.period);
+    const patch: { elec?: number; water?: number } = {};
+    if (meter.elec !== undefined) patch.elec = meter.elec;
+    if (meter.water !== undefined) patch.water = meter.water;
+    if (mine.length) for (const d of mine) batch.update(d.ref, patch);
+    else batch.set(ref(p.id, "meterReadings", `${bill.roomId}_${bill.issueDate}`), { roomId: bill.roomId, period: bill.period, readOn: bill.issueDate, elec: meter.elec ?? 0, water: meter.water ?? 0 });
+  }
   audit(batch, p.id, "bill.edit", "bill", bill.id, `แก้บิล ${bill.billNo}: ฿${bill.total.toLocaleString("th-TH")} → ฿${total.toLocaleString("th-TH")}`);
   await batch.commit();
 }

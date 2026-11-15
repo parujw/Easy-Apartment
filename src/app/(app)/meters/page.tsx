@@ -30,6 +30,7 @@ export default function MetersPage() {
   const [rows, setRows] = useState<Record<string, Row>>({});
   const [issued, setIssued] = useState<Bill[]>([]);
   const [fixing, setFixing] = useState<string | null>(null);
+  const [editPrev, setEditPrev] = useState<Set<string>>(new Set());
   const a = useAction();
 
   // Monthly rooms with a tenant, in room order
@@ -59,9 +60,10 @@ export default function MetersPage() {
       const units = bill?.items.find((i) => i.kind === kind)?.qty;
       return units === undefined || cur === undefined ? undefined : (cur - units + 100000) % 100000;
     };
-    const elecPrev = last ? last.elec : fromBill("elec", saved?.elec) ?? num(r.elecPrev);
-    const waterPrev = last ? last.water : fromBill("water", saved?.water) ?? num(r.waterPrev);
-    const knownPrev = !!last || (!!bill && !!saved);
+    // A "before" number typed by the owner wins (e.g. a placeholder 1 carried over from the old system).
+    const elecPrev = r.elecPrev !== "" ? num(r.elecPrev) : last ? last.elec : fromBill("elec", saved?.elec) ?? NaN;
+    const waterPrev = r.waterPrev !== "" ? num(r.waterPrev) : last ? last.water : fromBill("water", saved?.water) ?? NaN;
+    const knownPrev = (!!last || (!!bill && !!saved)) && !editPrev.has(room.id);
     const elecCurr = num(r.elecCurr), waterCurr = num(r.waterCurr);
     const carry = bill ? [] : carryOverBills(openBills, tenancyLeaseIds(leases, lease.id), period);
     const keep = bill ? bill.items.filter((i) => i.kind === "other" || i.kind === "discount") : [];
@@ -163,6 +165,12 @@ export default function MetersPage() {
                   {!knownPrev && <input className={field} inputMode="decimal" placeholder="เลขก่อน" data-meter value={r.waterPrev} onKeyDown={next} onChange={(e) => set(room.id, "waterPrev", e.target.value)} />}
                   <input className={`${field} mt-1`} inputMode="decimal" enterKeyHint="next" placeholder="เลขปัจจุบัน" data-meter value={r.waterCurr} onKeyDown={next} onChange={(e) => set(room.id, "waterCurr", e.target.value)} />
                 </label>
+                {knownPrev && (
+                  <button type="button" className="col-span-2 min-h-10 text-left text-sm text-brand"
+                    onClick={() => { setEditPrev(new Set(editPrev).add(room.id)); setRows((x) => ({ ...x, [room.id]: { ...(x[room.id] ?? EMPTY), elecPrev: String(elecPrev), waterPrev: String(waterPrev) } })); }}>
+                    เลขก่อนไม่ถูก? แก้เลขก่อน
+                  </button>
+                )}
                 {!done && (
                   <details className="col-span-2">
                     <summary className="cursor-pointer text-muted">ค่าอื่นๆ / ส่วนลด {(r.other || r.discount) && "•"}</summary>

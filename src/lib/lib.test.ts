@@ -215,3 +215,15 @@ test("LINE signature, reminder days and bill text", () => {
   assert.match(t, /5 พ\.ย\. 69/);
   assert.match(t, /https:\/\/x\.app\/b\/abc/);
 });
+
+import { parseMeterLabel, meterItem, amountItem } from "./billing.ts";
+test("bill editor helpers: meter labels and rebuilt lines", () => {
+  assert.deepEqual(parseMeterLabel("ค่าไฟ (1181 → 1381)"), { base: "ค่าไฟ", prev: 1181, curr: 1381 });
+  assert.deepEqual(parseMeterLabel("ค่าน้ำ (12->16)"), { base: "ค่าน้ำ", prev: 12, curr: 16 });
+  assert.equal(parseMeterLabel("ค่าไฟ"), null);
+  assert.deepEqual(meterItem("elec", "ค่าไฟ", 1181, 1391, 8), { kind: "elec", label: "ค่าไฟ (1181 → 1391)", qty: 210, unitPrice: 8, amount: 1680 });
+  assert.equal(meterItem("water", "ค่าน้ำ", 99990, 20, 18).qty, 30);
+  assert.throws(() => meterItem("elec", "ค่าไฟ", 500, 400, 8), /เลขหลังน้อยกว่าเลขก่อน/);
+  assert.equal(amountItem("discount", "ส่วนลด", 1, 200).amount, -200);
+  assert.equal(amountItem("rent", "ค่าเช่าห้อง", 1, 3200.5).amount, 3200.5);
+});

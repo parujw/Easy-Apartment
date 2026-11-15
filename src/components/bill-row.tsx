@@ -7,7 +7,7 @@ import { useLive } from "@/lib/hooks";
 import { useProperty } from "@/components/property-provider";
 import { Btn, NumField, Select, Field, useAction } from "@/components/ui";
 import { deletePayment, editBill, receivePayment, voidBill } from "@/lib/ops";
-import { total, type BillItem } from "@/lib/billing";
+import { amountItem, meterItem, parseMeterLabel, total, type BillItem } from "@/lib/billing";
 import { isoTh, todayBkk } from "@/lib/dates";
 import { BILL_STATUS_TH, METHOD_TH, balance, thb, type Bill, type Payment } from "@/lib/model";
 
@@ -40,38 +40,98 @@ const KIND_LABEL: Record<BillItem["kind"], string> = {
   parking: "ที่จอดรถ", other: "อื่นๆ", prev_balance: "ยอดค้างยกมา", discount: "ส่วนลด",
 };
 
-/** Edit lines of an issued bill (wrong meter number, forgotten discount). Number of the bill stays. */
+/** Editor row kept as text so people can clear a box, type decimals, etc. Converted on save. */
+type EditRow = {
+  kind: BillItem["kind"]; label: string; qty: string; price: string;
+  meter: { base: string; prev: string; curr: string } | null;
+};
+
+const toRow = (i: BillItem): EditRow => {
+  const m = i.kind === "elec" || i.kind === "water" ? parseMeterLabel(i.label) : null;
+  return { kind: i.kind, label: i.label, qty: String(i.qty), price: String(Math.abs(i.unitPrice)),
+    meter: m ? { base: m.base, prev: String(m.prev), curr: String(m.curr) } : null };
+};
+const numOf = (s: string, what: string) => {
+  const v = Number(s.replace(/,/g, "").trim());
+  if (s.trim() === "" || !Number.isFinite(v)) throw new Error(`กรอก${what}ให้เป็นตัวเลข`);
+  return v;
+};
+function toItem(r: EditRow): BillItem {
+  const name = r.meter?.base ?? r.label.trim();
+  if (r.meter) return meterItem(r.kind as "elec" | "water", r.meter.base, numOf(r.meter.prev, `เลขก่อน (${name})`), numOf(r.meter.curr, `เลขหลัง (${name})`), numOf(r.price, `ราคาต่อหน่วย (${name})`));
+  if (!r.label.trim()) throw new Error("กรอกชื่อรายการให้ครบ");
+  return amountItem(r.kind, r.label.trim(), numOf(r.qty, `จำนวน (${name})`), numOf(r.price, `จำนวนเงิน (${name})`));
+}
+const tryTotal = (rows: EditRow[]) => { try { return { sum: total(rows.map(toItem)), err: "" }; } catch (e) { return { sum: NaN, err: (e as Error).message }; } };
+
+const box = "mt-1 block w-full min-h-12 rounded-xl border border-black/15 bg-surface px-3 text-base";
+
+/** Edit an issued bill: meter lines by readings (before → after), other lines by amount. Bill number stays. */
 function BillEditor({ bill, onDone }: { bill: Bill; onDone: () => void }) {
   const { property } = useProperty();
-  const [items, setItems] = useState<BillItem[]>(bill.items.map((i) => ({ ...i })));
+  const [rows, setRows] = useState<EditRow[]>(bill.items.map(toRow));
   const a = useAction();
-  const set = (k: number, patch: Partial<BillItem>) => setItems(items.map((it, i) => {
-    if (i !== k) return it;
-    const next = { ...it, ...patch };
-    next.amount = Math.round(next.qty * next.unitPrice * 100) / 100;
-    if (next.kind === "discount") next.amount = -Math.abs(next.amount);
-    return next;
-  }));
+  const set = (k: number, patch: Partial<EditRow>) => setRows(rows.map((r, i) => (i === k ? { ...r, ...patch } : r)));
+  const setMeter = (k: number, patch: Partial<NonNullable<EditRow["meter"]>>) => setRows(rows.map((r, i) => (i === k && r.meter ? { ...r, meter: { ...r.meter, ...patch } } : r)));
+  const { sum, err } = tryTotal(rows);
+
+  async function save() {
+    const items = rows.map(toItem);
+    const after = (kind: "elec" | "water") => { const r = rows.find((x) => x.kind === kind && x.meter); return r ? Number(r.meter!.curr) : undefined; };
+    const before = (kind: "elec" | "water") => { const i = bill.items.find((x) => x.kind === kind); return i ? parseMeterLabel(i.label)?.curr : undefined; };
+    const meter: { elec?: number; water?: number } = {};
+    if (after("elec") !== undefined && after("elec") !== before("elec")) meter.elec = after("elec");
+    if (after("water") !== undefined && after("water") !== before("water")) meter.water = after("water");
+    await editBill(property, bill, items, bill.note ?? "", meter);
+    onDone();
+    return `แก้บิล ${bill.billNo} แล้ว · ฿${thb(total(items))}`;
+  }
+
   return (
-    <div className="mt-3 space-y-2">
-      {items.map((it, k) => (
-        <div key={k} className="grid grid-cols-[1fr_4.5rem_5.5rem_2.5rem] items-end gap-2">
-          <Field label={KIND_LABEL[it.kind]} value={it.label} onChange={(e) => set(k, { label: e.target.value })} />
-          <NumField label="จำนวน" value={it.qty} onChange={(v) => set(k, { qty: Number(v) || 0 })} />
-          <NumField label="ราคา" value={Math.abs(it.unitPrice)} onChange={(v) => set(k, { unitPrice: Number(v) || 0 })} />
-          <button aria-label="ลบรายการ" className="min-h-12 text-red-600" onClick={() => setItems(items.filter((_, i) => i !== k))}>✕</button>
+    <div className="mt-3 space-y-3">
+      {rows.map((r, k) => (
+        <div key={k} className="rounded-xl p-3 ring-1 ring-black/10">
+          <div className="flex items-center justify-between gap-2">
+            {r.meter || r.kind === "prev_balance"
+              ? <p className="font-semibold">{r.meter ? r.meter.base : r.label}</p>
+              : <input aria-label="ชื่อรายการ" className={`${box} mt-0 font-semibold`} value={r.label} onChange={(e) => set(k, { label: e.target.value })} />}
+            {r.kind !== "prev_balance" && (
+              <button type="button" aria-label={`ลบ ${r.meter?.base ?? r.label}`} className="min-h-12 min-w-12 text-red-600" onClick={() => setRows(rows.filter((_, i) => i !== k))}>✕</button>
+            )}
+          </div>
+          {r.meter ? (
+            <div className="mt-2 grid grid-cols-3 gap-2 text-sm">
+              <label>เลขก่อน<input className={box} inputMode="decimal" value={r.meter.prev} onChange={(e) => setMeter(k, { prev: e.target.value })} /></label>
+              <label>เลขหลัง<input className={box} inputMode="decimal" value={r.meter.curr} onChange={(e) => setMeter(k, { curr: e.target.value })} /></label>
+              <label>บาท/หน่วย<input className={box} inputMode="decimal" value={r.price} onChange={(e) => set(k, { price: e.target.value })} /></label>
+              <p className="col-span-3 text-muted">{(() => { try { const it = toItem(r); return `${it.qty} หน่วย × ${thb(it.unitPrice)} = ฿${thb(it.amount)}`; } catch (e) { return (e as Error).message; } })()}</p>
+            </div>
+          ) : r.kind === "prev_balance" ? (
+            <p className="mt-1 text-sm text-muted">฿{thb(Number(r.price) * Number(r.qty))} · ยอดค้างจากบิลก่อน แก้ที่บิลเดิม</p>
+          ) : r.qty !== "1" ? (
+            <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+              <label>จำนวน<input className={box} inputMode="decimal" value={r.qty} onChange={(e) => set(k, { qty: e.target.value })} /></label>
+              <label>ราคาต่อหน่วย<input className={box} inputMode="decimal" value={r.price} onChange={(e) => set(k, { price: e.target.value })} /></label>
+            </div>
+          ) : (
+            <label className="mt-2 block text-sm">{r.kind === "discount" ? "ส่วนลด (บาท)" : "จำนวนเงิน (บาท)"}
+              <input className={box} inputMode="decimal" value={r.price} onChange={(e) => set(k, { price: e.target.value })} />
+            </label>
+          )}
         </div>
       ))}
       <div className="flex flex-wrap gap-2 text-sm">
         {(["other", "discount"] as const).map((kind) => (
-          <button key={kind} className="min-h-10 rounded-full px-3 ring-1 ring-black/15"
-            onClick={() => setItems([...items, { kind, label: KIND_LABEL[kind], qty: 1, unitPrice: 0, amount: 0 }])}>+ {KIND_LABEL[kind]}</button>
+          <button key={kind} type="button" className="min-h-12 rounded-xl px-4 ring-1 ring-black/15"
+            onClick={() => setRows([...rows, { kind, label: KIND_LABEL[kind], qty: "1", price: "", meter: null }])}>+ {KIND_LABEL[kind]}</button>
         ))}
       </div>
-      <p className="font-semibold">ยอดใหม่ ฿{thb(total(items))} {bill.paid > 0 && <span className="text-sm text-muted">(รับแล้ว ฿{thb(bill.paid)})</span>}</p>
+      <p className="font-semibold">
+        {err ? <span className="text-red-600">{err}</span> : <>ยอดใหม่ ฿{thb(sum)} <span className="text-sm font-normal text-muted">(เดิม ฿{thb(bill.total)}{bill.paid > 0 && ` · รับแล้ว ฿${thb(bill.paid)}`})</span></>}
+      </p>
       <div className="grid grid-cols-2 gap-2">
         <Btn kind="ghost" onClick={onDone}>ยกเลิก</Btn>
-        <Btn disabled={a.busy} onClick={() => a.run(async () => { await editBill(property, bill, items); onDone(); return `แก้บิล ${bill.billNo} แล้ว`; })}>บันทึกการแก้ไข</Btn>
+        <Btn disabled={a.busy || !!err} onClick={() => a.run(save)}>บันทึกการแก้ไข</Btn>
       </div>
       {a.view}
     </div>
