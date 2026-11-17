@@ -387,6 +387,7 @@
 }
 
 @media print {
+  html, body, .print-screen { background: #fff !important; }
   .print-bar { display: none; }
 
   /* ขอบกระดาษมาจาก @page แล้ว แผ่นจึงไม่ต้องเว้นเองซ้ำอีก */

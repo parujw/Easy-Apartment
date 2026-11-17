@@ -553,6 +553,7 @@
 /* --------------------------------- พิมพ์จริง -------------------------------- */
 
 @media print {
+  html, body, .print-screen { background: #fff !important; }
   .print-bar,
   .blank-setup {
     display: none;
