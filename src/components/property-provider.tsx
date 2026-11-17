@@ -18,6 +18,8 @@ export type Property = {
   photo?: string; elecCostPerUnit?: number; waterCostPerUnit?: number;
   /** building defaults used for every new tenancy (owner can still agree a special price per tenant) */
   defaultElecRate?: number; defaultWaterRate?: number; defaultDueDay?: number;
+  /** how W addresses the owner and names the building in the Morning Brief */
+  wCallName?: string; wBuildingName?: string;
   members?: Record<string, "owner" | "assistant" | "viewer">;
 };
 

@@ -56,7 +56,7 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys()
              .hasOnly(['name', 'phone', 'address', 'promptpayId', 'accountName', 'docPrefix',
                        'nameEn', 'preparedBy', 'payMethod', 'accountNo', 'payReference', 'payNote', 'lineId', 'lineUrl',
-                       'photo', 'elecCostPerUnit', 'waterCostPerUnit', 'defaultElecRate', 'defaultWaterRate', 'defaultDueDay',
+                       'photo', 'elecCostPerUnit', 'waterCostPerUnit', 'defaultElecRate', 'defaultWaterRate', 'defaultDueDay', 'wCallName', 'wBuildingName',
                        'members', 'memberNames']);
 
       allow delete: if false;

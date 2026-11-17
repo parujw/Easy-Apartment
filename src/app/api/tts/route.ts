@@ -1,4 +1,4 @@
-// W's voice: a deep male Thai voice made on the server (Azure "Niwat", or an ElevenLabs voice).
+// W's voice: a warm female Thai voice made on the server (Azure "Premwadee", or an ElevenLabs voice).
 // Not configured → 501, and the app falls back to the phone's own Thai voice.
 import { NextResponse } from "next/server";
 import { adminAuth } from "@/lib/server/admin";
@@ -20,7 +20,7 @@ export async function POST(req: Request) {
     ? await fetch(`https://${process.env.AZURE_SPEECH_REGION}.tts.speech.microsoft.com/cognitiveservices/v1`, {
         method: "POST", signal: AbortSignal.timeout(15_000),
         headers: { "Ocp-Apim-Subscription-Key": process.env.AZURE_SPEECH_KEY!, "Content-Type": "application/ssml+xml", "X-Microsoft-OutputFormat": "audio-24khz-48kbitrate-mono-mp3" },
-        body: `<speak version="1.0" xml:lang="th-TH"><voice name="${process.env.AZURE_SPEECH_VOICE ?? "th-TH-NiwatNeural"}"><prosody rate="-4%" pitch="-6%">${xml(text)}</prosody></voice></speak>`,
+        body: `<speak version="1.0" xml:lang="th-TH"><voice name="${process.env.AZURE_SPEECH_VOICE ?? "th-TH-PremwadeeNeural"}"><prosody rate="-3%" pitch="+2%">${xml(text)}</prosody></voice></speak>`,
       })
     : await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${process.env.ELEVENLABS_VOICE_ID}`, {
         method: "POST", signal: AbortSignal.timeout(20_000),

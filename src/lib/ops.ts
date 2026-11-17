@@ -402,7 +402,7 @@ export async function setMaintenanceStatus(pid: string, m: Maintenance, status: 
 
 export const PROPERTY_EDITABLE = ["name", "phone", "address", "promptpayId", "accountName", "docPrefix",
   "nameEn", "preparedBy", "payMethod", "accountNo", "payReference", "payNote", "lineId", "lineUrl",
-  "photo", "elecCostPerUnit", "waterCostPerUnit", "defaultElecRate", "defaultWaterRate", "defaultDueDay"] as const;
+  "photo", "elecCostPerUnit", "waterCostPerUnit", "defaultElecRate", "defaultWaterRate", "defaultDueDay", "wCallName", "wBuildingName"] as const;
 
 export function updateProperty(pid: string, data: Partial<Pick<Property, (typeof PROPERTY_EDITABLE)[number]>>) {
   if (data.docPrefix !== undefined && !/^[A-Z0-9]{1,6}$/.test(data.docPrefix)) throw new Error("อักษรนำหน้าเอกสาร: A-Z หรือ 0-9 ไม่เกิน 6 ตัว");

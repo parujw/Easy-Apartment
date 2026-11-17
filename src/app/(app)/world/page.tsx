@@ -10,8 +10,8 @@ import { useData } from "@/components/data-provider";
 import { useShell } from "@/components/shell";
 import PixelWorld from "@/components/pixel-world";
 import { toast } from "@/components/toast";
-import { addMaintenance, createOwnerLineLink, receivePayment } from "@/lib/ops";
-import { buildWorld, parseCommand, type AgentId, type Draft, type Intent } from "@/lib/world";
+import { addMaintenance, createOwnerLineLink, receivePayment, updateProperty } from "@/lib/ops";
+import { buildWorld, morningGreeting, parseCommand, type AgentId, type Draft, type Intent } from "@/lib/world";
 import { monthRange, periodOf, todayBkk } from "@/lib/dates";
 import { balance, thb, type Expense, type Maintenance, type MeterReading } from "@/lib/model";
 
@@ -20,7 +20,7 @@ import { balance, thb, type Expense, type Maintenance, type MeterReading } from 
 const glass = "rounded-[20px] bg-white/[.06] ring-1 ring-white/15 backdrop-blur-md";
 const mono = "font-mono text-[12px] tracking-[.12em]";
 
-/** W's voice: server voice (deep male Thai) when set up, else the phone's Thai voice made deeper. */
+/** W's voice: a warm female Thai voice — server voice when set up, else the phone's own Thai voice. */
 function useVoice() {
   const audio = useRef<HTMLAudioElement | null>(null);
   const stop = () => { audio.current?.pause(); try { window.speechSynthesis?.cancel(); } catch { /* none */ } };
@@ -29,8 +29,8 @@ function useVoice() {
     const voices = synth?.getVoices().filter((v) => /^th/i.test(v.lang)) ?? [];
     if (!synth || !voices.length) { setTimeout(done, 2200 + text.length * 45); return; } // no Thai voice: captions only
     const u = new SpeechSynthesisUtterance(text);
-    u.lang = "th-TH"; u.voice = voices.find((v) => /niwat|male|ชาย/i.test(v.name) && !/female|kanya|premwadee/i.test(v.name)) ?? voices[0];
-    u.rate = 0.95; u.pitch = 0.55; u.onend = () => done(); u.onerror = () => done();
+    u.lang = "th-TH"; u.voice = voices.find((v) => /premwadee|achara|kanya|narisa|female|หญิง/i.test(v.name)) ?? voices[0];
+    u.rate = 0.95; u.pitch = 1.08; u.onend = () => done(); u.onerror = () => done();
     synth.speak(u);
   });
   const say = async (text: string) => {
@@ -58,7 +58,8 @@ export default function WorldPage() {
   const expenses = useLive<Expense>(query(c("expenses"), where("spentOn", ">=", start), where("spentOn", "<=", end)), `${property.id}/exp/${period}`);
   const reads = useLive<MeterReading>(query(c("meterReadings"), where("readOn", ">=", start)), `${property.id}/mr/${start}`);
   const w = buildWorld({ rooms, bills, leases, tenants, bookings, maintenance: maint, expenses: expenses.reduce((s, e) => s + e.amount, 0),
-    readRoomIds: new Set(reads.map((r) => r.roomId)), today, property: { name: property.name, address: property.address, phone: property.phone, lineId: property.lineId } });
+    readRoomIds: new Set(reads.map((r) => r.roomId)), today, property: { name: property.name, address: property.address, phone: property.phone, lineId: property.lineId },
+    owner: { callName: property.wCallName, buildingName: property.wBuildingName || property.name } });
 
   const [agent, setAgent] = useState<AgentId>(w.late.length ? "collect" : "head");
   const [line, setLine] = useState<number | null>(null);
@@ -67,15 +68,16 @@ export default function WorldPage() {
   const [heard, setHeard] = useState<{ said: string; reply: string; ok?: { label: string; run: () => Promise<string | void> } } | null>(null);
   const [typed, setTyped] = useState("");
   const [ownerCode, setOwnerCode] = useState("");
+  const [names, setNames] = useState({ call: property.wCallName ?? "", building: property.wBuildingName ?? property.name });
   const playing = useRef(0);
   const rec = useRef<SR | null>(null);
   const { say, stop } = useVoice();
   useEffect(() => () => { stop(); rec.current?.stop(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const hour = Number(new Date().toLocaleString("en-GB", { timeZone: "Asia/Bangkok", hour: "2-digit", hour12: false }));
-  const hello = hour < 11 ? "อรุณสวัสดิ์ครับ" : hour < 17 ? "สวัสดีครับ" : "สวัสดีตอนเย็นครับ";
+  const hello = hour < 11 ? "อรุณสวัสดิ์ค่ะ" : hour < 17 ? "สวัสดีค่ะ" : "สวัสดีตอนเย็นค่ะ";
   const cur = w.agents.find((a) => a.id === agent) ?? w.agents[0];
-  w.brief[0] = w.brief[0].replace("อรุณสวัสดิ์ครับ", hello); // the 08:00 LINE report says good morning; in the app, greet for the time of day
+  w.brief[0] = w.brief[0].replace("อรุณสวัสดิ์ค่ะ", hello); // the 08:00 LINE report says good morning; in the app, greet for the time of day
 
   async function play() {
     const id = ++playing.current;
@@ -111,32 +113,32 @@ export default function WorldPage() {
       case "brief": reply = w.brief.join("\n"); break;
       case "owed": {
         const list = rooms.map((x) => ({ x, s: w.st.get(x.id)! })).filter((y) => y.s.owed > 0).sort((a, b) => b.s.lateDays - a.s.lateDays);
-        reply = list.length ? `ยังไม่จ่าย ${list.length} ห้อง\n${list.slice(0, 6).map((y) => `${y.x.number} ฿${thb(y.s.owed)}${y.s.lateDays ? ` เลย ${y.s.lateDays} วัน` : ""}`).join("\n")}` : "จ่ายครบทุกห้องแล้วครับ";
+        reply = list.length ? `ยังไม่จ่าย ${list.length} ห้อง\n${list.slice(0, 6).map((y) => `${y.x.number} ฿${thb(y.s.owed)}${y.s.lateDays ? ` เลย ${y.s.lateDays} วัน` : ""}`).join("\n")}` : "จ่ายครบทุกห้องแล้วค่ะ";
         break;
       }
       case "profit": reply = `เดือนนี้เก็บได้ ${thb(w.collected)} บาท\nรายจ่าย ${thb(expenses.reduce((s, e) => s + e.amount, 0))} บาท\nกำไร ${thb(w.collected - expenses.reduce((s, e) => s + e.amount, 0))} บาท`; break;
-      case "vacant": reply = w.vacant.length ? `ว่าง ${w.vacant.length} ห้อง: ${w.vacant.map((x) => x.number).join(", ")}` : "เต็มทุกห้องครับ"; break;
+      case "vacant": reply = w.vacant.length ? `ว่าง ${w.vacant.length} ห้อง: ${w.vacant.map((x) => x.number).join(", ")}` : "เต็มทุกห้องค่ะ"; break;
       case "pay": {
         const b = openBills.filter((x) => x.roomId === r!.id).sort((a, z) => a.dueDate.localeCompare(z.dueDate))[0];
-        if (!b) { reply = `ห้อง ${r!.number} ไม่มียอดค้างครับ`; break; }
+        if (!b) { reply = `ห้อง ${r!.number} ไม่มียอดค้างค่ะ`; break; }
         const amt = intent.amount ?? balance(b);
-        reply = `รับเงินห้อง ${r!.number}\n฿${thb(amt)} · ${intent.method === "cash" ? "เงินสด" : "โอน"} · วันนี้\nบันทึกเลยไหมครับ`;
+        reply = `รับเงินห้อง ${r!.number}\n฿${thb(amt)} · ${intent.method === "cash" ? "เงินสด" : "โอน"} · วันนี้\nบันทึกเลยไหมคะ`;
         ok = { label: "บันทึกรับเงิน", run: async () => { const no = await receivePayment(property, b.id, amt, intent.method, ""); return `รับเงินห้อง ${r!.number} แล้ว · ${no}`; } };
         break;
       }
-      case "bill": reply = `เปิดหน้าออกบิลห้อง ${r!.number} ให้แล้วครับ ใส่เลขไฟกับน้ำได้เลย`; setTimeout(() => openRoom(r!.id, { name: "issue" }), 600); break;
+      case "bill": reply = `เปิดหน้าออกบิลห้อง ${r!.number} ให้แล้วค่ะ ใส่เลขไฟกับน้ำได้เลย`; setTimeout(() => openRoom(r!.id, { name: "issue" }), 600); break;
       case "remind": {
         const d = w.drafts.find((x) => x.kind === "remind" && x.roomId === r!.id);
-        if (!d) { reply = `ห้อง ${r!.number} ไม่มียอดเลยกำหนดครับ`; break; }
+        if (!d) { reply = `ห้อง ${r!.number} ไม่มียอดเลยกำหนดค่ะ`; break; }
         reply = `จะส่งถึง${d.tenantId ? tenants.get(d.tenantId)?.fullName ?? "ผู้เช่า" : "ผู้เช่า"}\n“${edit[d.id] ?? d.text}”`;
         ok = { label: "ส่งข้อความ", run: async () => { await send(d); } };
         break;
       }
       case "repair":
-        reply = `แจ้งซ่อม${r ? `ห้อง ${r.number}` : "ส่วนกลาง"}\n${intent.problem}\nส่งให้ FIXY เลยไหมครับ`;
+        reply = `แจ้งซ่อม${r ? `ห้อง ${r.number}` : "ส่วนกลาง"}\n${intent.problem}\nส่งให้ FIXY เลยไหมคะ`;
         ok = { label: "แจ้งซ่อม", run: async () => { await addMaintenance(property.id, { room: r ?? null, problem: intent.problem, category: "อื่นๆ", priority: "normal" }); return "แจ้งซ่อมแล้ว"; } };
         break;
-      default: reply = "ยังไม่เข้าใจครับ ลองพูดว่า “รับเงินห้อง 103” หรือ “ห้องไหนยังไม่จ่าย”";
+      default: reply = "ยังไม่เข้าใจค่ะ ลองพูดว่า “รับเงินห้อง 103” หรือ “ห้องไหนยังไม่จ่าย”";
     }
     if (role === "viewer") ok = undefined;
     setHeard({ said, reply, ok }); setVoice("heard");
@@ -175,12 +177,12 @@ export default function WorldPage() {
           <div className="absolute inset-[30px] rounded-full" style={{ background: "radial-gradient(circle at 35% 30%,#e6fdff 0%,#6ee7ff 22%,#4c63ff 55%,#7a2bff 80%,#2a0b6e 100%)", boxShadow: "0 0 40px rgba(110,231,255,.55),0 0 90px rgba(122,43,255,.45)", animation: `ea-orb ${line !== null || voice ? "1.1s" : "3.2s"} ease-in-out infinite` }} />
         </div>
         <h1 className="mt-4 text-center text-[26px] font-semibold">{hello} {w.work ? `วันนี้มี ${w.work} เรื่อง` : "วันนี้เรียบร้อยดี"}</h1>
-        <p className="mt-1 text-center text-[15px] text-[#9aa6d6]">{w.drafts.length ? "ผมร่างข้อความไว้ให้แล้ว แก้ได้ก่อนส่ง" : "ไม่มีข้อความรอส่ง"}</p>
+        <p className="mt-1 text-center text-[15px] text-[#9aa6d6]">{w.drafts.length ? "ร่างข้อความไว้ให้แล้วค่ะ แก้ได้ก่อนส่ง" : "ไม่มีข้อความรอส่ง"}</p>
 
         {line === null ? (
           <button onClick={play} className="mx-auto mt-4 flex min-h-[52px] items-center gap-2.5 rounded-full bg-[rgba(110,231,255,.10)] py-0 pr-5 pl-2 font-semibold ring-1 ring-[rgba(110,231,255,.45)] shadow-[0_0_22px_rgba(110,231,255,.2)]">
             <span className="flex h-[38px] w-[38px] items-center justify-center rounded-full bg-gradient-to-br from-[#6ee7ff] to-[#8a6bff]"><svg width="16" height="16" viewBox="0 0 24 24" fill="#070a1c" aria-hidden="true"><path d="M7 4v16l13-8z" /></svg></span>
-            ฟังสรุปจาก W
+            ฟัง Morning Brief
           </button>
         ) : (
           <div role="status" aria-live="polite" className={`mt-4 p-3.5 ring-[rgba(110,231,255,.45)] ${glass}`}>
@@ -228,7 +230,23 @@ export default function WorldPage() {
         </div>
 
         {role === "owner" && (
-          <div className={`mt-4 p-3.5 ${glass}`}>
+          <div className={`mt-4 space-y-2 p-3.5 ${glass}`}>
+            <p className="font-semibold">W เรียกคุณว่า</p>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="text-[13px] text-[#9aa6d6]">ชื่อคุณ
+                <input value={names.call} onChange={(e) => setNames({ ...names, call: e.target.value })} placeholder="คุณวสันต์" className="mt-1 block min-h-12 w-full rounded-2xl bg-black/35 px-3 text-[16px] text-[#e8ecff] outline-none focus:ring-1 focus:ring-[#6ee7ff]" />
+              </label>
+              <label className="text-[13px] text-[#9aa6d6]">ชื่อหอที่ W พูด
+                <input value={names.building} onChange={(e) => setNames({ ...names, building: e.target.value })} className="mt-1 block min-h-12 w-full rounded-2xl bg-black/35 px-3 text-[16px] text-[#e8ecff] outline-none focus:ring-1 focus:ring-[#6ee7ff]" />
+              </label>
+            </div>
+            <p className="text-[13px] text-[#9aa6d6]">“{morningGreeting(names.call, names.building || property.name, today)}”</p>
+            <button onClick={async () => { await updateProperty(property.id, { wCallName: names.call.trim(), wBuildingName: names.building.trim() }); toast("บันทึกแล้วค่ะ"); }}
+              className="min-h-12 w-full rounded-2xl font-semibold ring-1 ring-[rgba(110,231,255,.5)]">บันทึก</button>
+          </div>
+        )}
+        {role === "owner" && (
+          <div className={`mt-3 p-3.5 ${glass}`}>
             <p className="font-semibold">ส่งสรุปเข้า LINE ทุกเช้า 08:00</p>
             {ownerCode
               ? <p className="mt-1 text-[15px] text-[#cfd6ff]">เพิ่มเพื่อน LINE ของ Easy Apartment แล้วพิมพ์รหัส <b className="font-mono text-lg tracking-widest text-[#6ee7ff]">{ownerCode}</b> (ใช้ได้ 7 วัน)</p>

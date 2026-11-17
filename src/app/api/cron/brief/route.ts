@@ -36,6 +36,7 @@ export async function GET(req: Request) {
       expenses: all<{ amount: number }>(exp).reduce((s, e) => s + (e.amount || 0), 0),
       readRoomIds: new Set(all<{ roomId: string }>(reads).map((r) => r.roomId)), today,
       property: { name: p.data().name ?? "", address: p.data().address ?? "", phone: p.data().phone ?? "", lineId: p.data().lineId },
+      owner: { callName: p.data().wCallName, buildingName: p.data().wBuildingName || p.data().name },
     });
     const text = `W · ${p.data().name}\n\n${w.brief.join("\n")}\n\n${w.drafts.length ? `ข้อความร่าง ${w.drafts.length} ข้อความรอคุณกดส่ง\n` : ""}เปิด W World: ${origin}/world`;
     for (const id of lineIds) { try { await pushText(id, text); sent++; } catch (e) { console.error("brief", e); } }

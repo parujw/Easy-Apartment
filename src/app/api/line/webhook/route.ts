@@ -40,7 +40,7 @@ async function handle(e: LineEvent, origin: string) {
         summary: `${c.tenantName} ห้อง ${c.roomNumber} เชื่อม LINE แล้ว`, actorUid: "line", actorName: "LINE", at: FieldValue.serverTimestamp() });
       return c;
     });
-    if (res && "owner" in res) return replyText(e.replyToken, "เชื่อม LINE ของคุณกับ W แล้วครับ ทุกเช้า 08:00 ผมจะส่งสรุปมาที่นี่");
+    if (res && "owner" in res) return replyText(e.replyToken, "เชื่อม LINE ของคุณกับ W แล้วค่ะ ทุกเช้า 08:00 จะส่ง Morning Brief มาที่นี่นะคะ");
     return replyText(e.replyToken, res ? `เชื่อม LINE กับห้อง ${res.roomNumber} เรียบร้อย ✅\nบิลและการแจ้งเตือนจะส่งมาที่แชทนี้\nพิมพ์ “บิล” เพื่อดูยอดค้าง` : "รหัสไม่ถูกต้องหรือหมดอายุ กรุณาขอรหัสใหม่จากเจ้าของหอ");
   }
   if (/^myid$/i.test(text)) return replyText(e.replyToken, `LINE user id ของคุณ: ${userId}`);

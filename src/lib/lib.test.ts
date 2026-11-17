@@ -245,7 +245,7 @@ test("room state: one answer for grid, picker and sheet", () => {
   assert.equal(prev?.elec, 1); assert.equal(saved?.elec, 2);
 });
 
-import { buildWorld, parseCommand } from "./world.ts";
+import { buildWorld, morningGreeting, parseCommand } from "./world.ts";
 test("W World: voice commands", () => {
   assert.deepEqual(parseCommand("รับเงินห้อง 103 4,184 โอน"), { kind: "pay", room: "103", amount: 4184, method: "transfer" });
   assert.deepEqual(parseCommand("ห้อง ๒๐๑ จ่ายแล้ว เงินสด"), { kind: "pay", room: "201", amount: undefined, method: "cash" });
@@ -272,6 +272,8 @@ test("W World: staff, drafts and morning report from data", () => {
   assert.equal(w.agents.find((a) => a.id === "lease")?.count, 1);
   assert.deepEqual(w.drafts.map((d) => d.kind), ["remind", "vacancy", "renew"]);
   assert.match(w.drafts[0].text, /สวัสดีค่ะคุณสมชาย ค่าห้อง 201 เดือน ต.ค. 7,020 บาท เลยกำหนดมา 12 วัน/);
-  assert.equal(w.brief[0], "อรุณสวัสดิ์ครับ วันอังคารที่ 17 พฤศจิกายน");
+  assert.equal(w.brief[0], "อรุณสวัสดิ์ค่ะ ขอ Morning Brief ประจำวันอังคารที่ 17 พฤศจิกายน 2569");
+  assert.equal(morningGreeting("วสันต์", "วิไลเพลส 1", "2026-11-17"), "อรุณสวัสดิ์ค่ะคุณวสันต์ เจ้าของหอพักวิไลเพลส 1 ขอ Morning Brief ประจำวันอังคารที่ 17 พฤศจิกายน 2569");
+  assert.ok(!w.brief.join(" ").includes("ครับ"));
   assert.ok(w.brief.some((l) => l.includes("ห้อง 201 ค้าง 7,020 บาท")));
 });

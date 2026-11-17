@@ -20,12 +20,21 @@ type Booking = { roomId: string; status: string; checkIn: string; checkOut: stri
 export type WorldInput = {
   rooms: Room[]; bills: Bill[]; leases: Lease[]; tenants: Map<string, Tenant>; bookings: Booking[]; maintenance: Maint[];
   expenses: number; readRoomIds: Set<string>; today: string; property: { name: string; address: string; phone: string; lineId?: string };
+  /** how W addresses the owner and the building, e.g. "คุณวสันต์" / "วิไลเพลส 1" */
+  owner?: { callName?: string; buildingName?: string };
 };
 
 const MON = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
 const DAY = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"];
 const days = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 864e5);
 const baht = (n: number) => n.toLocaleString("th-TH", { maximumFractionDigits: 0 });
+
+/** "อรุณสวัสดิ์ค่ะคุณวสันต์ เจ้าของหอพักวิไลเพลส 1 ขอ Morning Brief ประจำวันที่ 17 พฤศจิกายน 2569" */
+export function morningGreeting(callName: string | undefined, buildingName: string, today: string, hello = "อรุณสวัสดิ์ค่ะ") {
+  const [y, m, d] = today.split("-").map(Number);
+  const who = callName?.trim() ? `${callName.trim().startsWith("คุณ") ? "" : "คุณ"}${callName.trim()} เจ้าของหอพัก${buildingName}` : "";
+  return `${hello}${who} ขอ Morning Brief ประจำวัน${DAY[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]}ที่ ${d} ${MON[m - 1]} ${y + 543}`;
+}
 
 export function buildWorld(w: WorldInput) {
   const period = w.today.slice(0, 7);
@@ -83,17 +92,15 @@ export function buildWorld(w: WorldInput) {
   ];
 
   // The morning report W reads out (and sends to the owner's LINE at 08:00)
-  const [y, m, d] = w.today.split("-").map(Number);
-  const dow = DAY[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
   const brief = [
-    `อรุณสวัสดิ์ครับ วัน${dow}ที่ ${d} ${MON[m - 1]}`,
-    billed > 0 ? `สถานะการเงิน เก็บแล้ว ${baht(collected)} บาท จาก ${baht(billed)} บาท คิดเป็น ${Math.round((collected / billed) * 100)} เปอร์เซ็นต์` : "เดือนนี้ยังไม่ได้ออกบิลครับ",
-    ...(late.length ? [`มี${late.length > 1 ? ` ${late.length} ห้อง` : "หนึ่งเรื่อง"}ที่ต้องรีบ ห้อง ${late[0].number} ค้าง ${baht(st.get(late[0].id)!.owed)} บาท เลยกำหนดมา ${st.get(late[0].id)!.lateDays} วัน ผมร่างข้อความทวงไว้ให้แล้วครับ`] : []),
+    morningGreeting(w.owner?.callName, w.owner?.buildingName ?? w.property.name, w.today),
+    billed > 0 ? `สถานะการเงิน เก็บแล้ว ${baht(collected)} บาท จาก ${baht(billed)} บาท คิดเป็น ${Math.round((collected / billed) * 100)} เปอร์เซ็นต์` : "เดือนนี้ยังไม่ได้ออกบิลค่ะ",
+    ...(late.length ? [`มี${late.length > 1 ? ` ${late.length} ห้อง` : "หนึ่งเรื่อง"}ที่ต้องรีบ ห้อง ${late[0].number} ค้าง ${baht(st.get(late[0].id)!.owed)} บาท เลยกำหนดมา ${st.get(late[0].id)!.lateDays} วัน ร่างข้อความทวงไว้ให้แล้วค่ะ`] : []),
     ...(todo.length ? [`ยังไม่ได้ออกบิล ${todo.length} ห้อง คือ ${nums(todo.slice(0, 5))}`] : []),
     ...(vacant.length ? [`ห้องว่าง ${vacant.length} ห้อง คือ ${nums(vacant.slice(0, 5))} โพสต์หาคนเช่าพร้อมแล้ว`] : []),
     ...(openJobs.length ? [`งานซ่อมค้าง ${openJobs.length} งาน`] : []),
     ...(ending.length ? [`สัญญาใกล้หมด ${ending.length} ห้อง`] : []),
-    work ? "ระบบทั้งหมดพร้อมทำงานครับ" : "วันนี้ไม่มีเรื่องค้าง ขอให้เป็นวันที่ดีครับ",
+    work ? "ขอให้เป็นวันที่ดีนะคะ" : "วันนี้ไม่มีเรื่องค้าง ขอให้เป็นวันที่ดีนะคะ",
   ];
   return { agents, drafts, brief, work, late, todo, vacant, collected, billed, st };
 }
