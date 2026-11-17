@@ -97,29 +97,37 @@ export function buildAlerts(input: { bills: B[]; leases: L[]; rooms: R[]; mainte
   return out.sort((a, b) => rank[a.level] - rank[b.level]);
 }
 
-/** Polite → firm → formal reminder text, ready to copy into LINE/SMS (V3 drafts.ts). */
+const MON = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+const money = (n: number) => n.toLocaleString("th-TH");
+
+/** Reminder that reads like the owner typed it: friendly → firm → formal by days overdue (V3 drafts.ts). */
 export function reminderDraft(b: { roomNumber: string; tenantName: string; period: string; dueDate: string; balance: number }, days: number, prop: { name: string; payNote?: string }): { tone: ReminderTone; text: string } {
   const tone = reminderTone(days);
-  const who = b.tenantName ? `คุณ${b.tenantName.replace(/^คุณ\s*/, "")}` : "ผู้เช่า";
-  const what = `ค่าเช่าห้อง ${b.roomNumber} รอบ ${cycleLabel(b.period.replace("-", ""), "full")} ยอด ${b.balance.toLocaleString("th-TH")} บาท`;
+  const who = b.tenantName ? `คุณ${b.tenantName.replace(/^คุณ\s*/, "").split(" ")[0]}` : "";
+  const month = MON[Number(b.period.slice(5, 7)) - 1] ?? cycleLabel(b.period.replace("-", ""), "full");
   const text = tone === "gentle"
-    ? `สวัสดีค่ะ ${who} ขอแจ้งเตือน${what} ครบกำหนดแล้ว ถ้าโอนแล้วรบกวนส่งสลิปให้ด้วยนะคะ ขอบคุณค่ะ — ${prop.name}`
+    ? `สวัสดีค่ะ${who} ค่าห้อง ${b.roomNumber} เดือน ${month} ${money(b.balance)} บาท ${days > 0 ? `เลยกำหนดมา ${days} วันแล้วนะคะ` : "ครบกำหนดแล้วนะคะ"} สะดวกโอนภายในวันศุกร์นี้ไหมคะ โอนแล้วส่งสลิปมาได้เลยค่ะ`
     : tone === "firm"
-      ? `เรียน ${who} ${what} เลยกำหนดชำระมา ${days} วันแล้ว กรุณาชำระภายใน 3 วัน หรือแจ้งวันที่จะชำระกลับมาค่ะ — ${prop.name}`
-      : `เรียน ${who} ${what} ค้างชำระเกิน ${days} วัน ขอให้ติดต่อผู้ดูแลเพื่อชำระหรือตกลงแผนการชำระภายใน 7 วัน มิฉะนั้นทางหอพักจำเป็นต้องดำเนินการตามสัญญาเช่า — ${prop.name}`;
+      ? `สวัสดีค่ะ${who} ค่าห้อง ${b.roomNumber} เดือน ${month} ${money(b.balance)} บาท เลยกำหนดมา ${days} วันแล้ว รบกวนโอนภายใน 3 วัน หรือบอกวันที่จะโอนกลับมาหน่อยนะคะ — ${prop.name}`
+      : `เรียน${who || "ผู้เช่า"} ห้อง ${b.roomNumber} ค้างค่าเช่าเดือน ${month} ${money(b.balance)} บาท มา ${days} วัน ขอให้ติดต่อเพื่อชำระหรือตกลงวิธีผ่อนภายใน 7 วัน มิฉะนั้นทางหอพักต้องดำเนินการตามสัญญาเช่า — ${prop.name}`;
   return { tone, text };
 }
 
 /** Vacancy post for Facebook/Marketplace — only facts the system knows (V3 rule: never invent amenities). */
 export function vacancyDraft(room: { number: string; floor: string; rentMonthly: number; deposit: number }, prop: { name: string; address: string; phone: string; lineId?: string }) {
   return [
-    `ห้องว่างพร้อมเข้าอยู่ — ${prop.name}`,
-    `ห้อง ${room.number} ชั้น ${room.floor}`,
-    room.rentMonthly ? `ค่าเช่า ${room.rentMonthly.toLocaleString("th-TH")} บาท/เดือน` : "",
-    room.deposit ? `เงินประกัน ${room.deposit.toLocaleString("th-TH")} บาท` : "",
-    prop.address ? `ที่ตั้ง: ${prop.address}` : "",
-    `สนใจติดต่อ ${prop.phone.replace(/^\+66/, "0")}${prop.lineId ? ` · LINE ${prop.lineId}` : ""}`,
+    `ว่างแล้ว 1 ห้อง ${prop.name} ชั้น ${room.floor}`,
+    room.rentMonthly ? `เดือนละ ${money(room.rentMonthly)}${room.deposit ? ` ประกัน ${money(room.deposit)}` : ""} เข้าอยู่ได้เลย` : "เข้าอยู่ได้เลย",
+    prop.address ? prop.address : "",
+    `สนใจโทร ${prop.phone.replace(/^\+66/, "0")}${prop.lineId ? ` · LINE ${prop.lineId}` : ""}`,
   ].filter(Boolean).join("\n");
+}
+
+/** Contract ending soon: ask whether they'll renew. */
+export function renewalDraft(l: { roomNumber: string; tenantName: string; endDate: string }) {
+  const [y, m, d] = l.endDate.split("-").map(Number);
+  const who = l.tenantName ? `คุณ${l.tenantName.replace(/^คุณ\s*/, "").split(" ")[0]}` : "";
+  return `สวัสดีค่ะ${who} สัญญาห้อง ${l.roomNumber} จะครบวันที่ ${d} ${MON[m - 1]} ${String(y + 543).slice(2)} สนใจต่อสัญญาไหมคะ แจ้งได้เลยนะคะ`;
 }
 
 export const periodsBack = (period: string, n: number) =>

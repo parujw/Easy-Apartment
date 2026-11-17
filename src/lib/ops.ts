@@ -459,6 +459,14 @@ export const removeMember = (pid: string, uid: string) =>
   updateDoc(doc(db(), "properties", pid), { [`members.${uid}`]: deleteField(), [`memberNames.${uid}`]: deleteField() });
 
 /** One-time code a tenant sends to the LINE bot to link their LINE account (consumed by the server). */
+/** Code the OWNER types to our LINE OA so W's 08:00 report reaches their own LINE. */
+export async function createOwnerLineLink(pid: string) {
+  const c = code(6);
+  await setDoc(doc(db(), "lineLinks", c), { propertyId: pid, ownerUid: auth().currentUser?.uid ?? "", tenantId: "", tenantName: auth().currentUser?.displayName ?? "เจ้าของ", roomNumber: "",
+    createdBy: auth().currentUser?.uid ?? "", expiresAt: new Date(Date.now() + 7 * 864e5), usedAt: null });
+  return c;
+}
+
 export async function createLineLink(pid: string, tenant: Pick<Tenant, "id" | "fullName">, roomNumber: string) {
   const c = code(6);
   await setDoc(doc(db(), "lineLinks", c), { propertyId: pid, tenantId: tenant.id, tenantName: tenant.fullName, roomNumber,

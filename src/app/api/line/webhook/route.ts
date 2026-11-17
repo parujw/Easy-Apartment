@@ -20,7 +20,7 @@ async function handle(e: LineEvent, origin: string) {
   const userId = e.source?.userId;
   if (e.type !== "message" || !userId || !e.replyToken) return;
   const db = adminDb();
-  const link = (await db.doc(`lineUsers/${userId}`).get()).data() as { propertyId: string; tenantId: string; roomNumber: string } | undefined;
+  const link = (await db.doc(`lineUsers/${userId}`).get()).data() as { propertyId: string; tenantId: string; roomNumber: string; kind?: string } | undefined;
   const text = (e.message?.text ?? "").trim();
 
   if (e.message?.type === "text" && LINK_CODE.test(text.toUpperCase())) {
@@ -29,15 +29,22 @@ async function handle(e: LineEvent, origin: string) {
       const c = (await tx.get(ref)).data();
       if (!c || c.usedAt || c.expiresAt.toMillis() < Date.now()) return null;
       tx.update(ref, { usedAt: FieldValue.serverTimestamp(), lineUserId: userId });
+      if (c.ownerUid) {
+        tx.set(db.doc(`users/${c.ownerUid}`), { lineUserId: userId }, { merge: true });
+        tx.set(db.doc(`lineUsers/${userId}`), { propertyId: c.propertyId, ownerUid: c.ownerUid, kind: "owner", linkedAt: FieldValue.serverTimestamp() });
+        return { ...c, owner: true };
+      }
       tx.update(db.doc(`properties/${c.propertyId}/tenants/${c.tenantId}`), { lineUserId: userId });
       tx.set(db.doc(`lineUsers/${userId}`), { propertyId: c.propertyId, tenantId: c.tenantId, roomNumber: c.roomNumber, linkedAt: FieldValue.serverTimestamp() });
       tx.set(db.collection(`properties/${c.propertyId}/auditLogs`).doc(), { action: "line.link", targetType: "tenant", targetId: c.tenantId,
         summary: `${c.tenantName} ห้อง ${c.roomNumber} เชื่อม LINE แล้ว`, actorUid: "line", actorName: "LINE", at: FieldValue.serverTimestamp() });
       return c;
     });
+    if (res && "owner" in res) return replyText(e.replyToken, "เชื่อม LINE ของคุณกับ W แล้วครับ ทุกเช้า 08:00 ผมจะส่งสรุปมาที่นี่");
     return replyText(e.replyToken, res ? `เชื่อม LINE กับห้อง ${res.roomNumber} เรียบร้อย ✅\nบิลและการแจ้งเตือนจะส่งมาที่แชทนี้\nพิมพ์ “บิล” เพื่อดูยอดค้าง` : "รหัสไม่ถูกต้องหรือหมดอายุ กรุณาขอรหัสใหม่จากเจ้าของหอ");
   }
   if (/^myid$/i.test(text)) return replyText(e.replyToken, `LINE user id ของคุณ: ${userId}`);
+  if (link?.kind === "owner") return replyText(e.replyToken, `เปิด W World ได้ที่ ${origin}/world`);
   if (!link) return replyText(e.replyToken, "สวัสดีค่ะ 🙏 กรุณาพิมพ์รหัส 6 ตัวที่ได้จากเจ้าของหอ เพื่อเชื่อมกับห้องของคุณ");
 
   const prop = db.doc(`properties/${link.propertyId}`);

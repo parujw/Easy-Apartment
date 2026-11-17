@@ -244,3 +244,34 @@ test("room state: one answer for grid, picker and sheet", () => {
   const { prev, saved } = readingsFor(rs, "r1", "2026-11");
   assert.equal(prev?.elec, 1); assert.equal(saved?.elec, 2);
 });
+
+import { buildWorld, parseCommand } from "./world.ts";
+test("W World: voice commands", () => {
+  assert.deepEqual(parseCommand("รับเงินห้อง 103 4,184 โอน"), { kind: "pay", room: "103", amount: 4184, method: "transfer" });
+  assert.deepEqual(parseCommand("ห้อง ๒๐๑ จ่ายแล้ว เงินสด"), { kind: "pay", room: "201", amount: undefined, method: "cash" });
+  assert.equal(parseCommand("ห้องไหนยังไม่จ่ายบ้าง").kind, "owed");
+  assert.deepEqual(parseCommand("ออกบิลห้อง 101"), { kind: "bill", room: "101" });
+  assert.deepEqual(parseCommand("ส่งข้อความทวงห้อง 201"), { kind: "remind", room: "201" });
+  assert.deepEqual(parseCommand("แจ้งซ่อม แอร์ห้อง 203 ไม่เย็น"), { kind: "repair", room: "203", problem: "แอร์ ไม่เย็น" });
+  assert.equal(parseCommand("เดือนนี้กำไรเท่าไหร่").kind, "profit");
+  assert.equal(parseCommand("สวัสดี").kind, "unknown");
+});
+test("W World: staff, drafts and morning report from data", () => {
+  const rooms = [
+    { id: "a", number: "101", floor: "1", kind: "monthly", status: "occupied", rentMonthly: 3500, deposit: 7000 },
+    { id: "b", number: "102", floor: "1", kind: "monthly", status: "vacant", rentMonthly: 3200, deposit: 6400 },
+    { id: "c", number: "201", floor: "2", kind: "monthly", status: "occupied", rentMonthly: 3500, deposit: 7000 },
+  ];
+  const leases = [{ id: "la", roomId: "a", tenantId: "ta", status: "active", endDate: "2027-07-01" }, { id: "lc", roomId: "c", tenantId: "tc", status: "active", endDate: "2026-12-09" }];
+  const tenants = new Map([["ta", { id: "ta", fullName: "ฝน ดี", lineUserId: null }], ["tc", { id: "tc", fullName: "สมชาย ใจ", lineUserId: "U1" }]]);
+  const bills = [{ id: "x", roomId: "c", roomNumber: "201", tenantName: "สมชาย ใจ", period: "2026-10", dueDate: "2026-11-05", total: 7020, paid: 0, status: "unpaid", leaseId: "lc", items: [] }];
+  const w = buildWorld({ rooms, bills, leases, tenants, bookings: [], maintenance: [], expenses: 0, readRoomIds: new Set(), today: "2026-11-17", property: { name: "วิไลเพลส", address: "", phone: "0625055446" } });
+  assert.equal(w.agents.find((a) => a.id === "collect")?.status, "alert");
+  assert.match(w.agents.find((a) => a.id === "collect")!.summary, /201 ค้าง ฿7,020 เลย 12 วัน/);
+  assert.equal(w.agents.find((a) => a.id === "rooms")?.count, 1);
+  assert.equal(w.agents.find((a) => a.id === "lease")?.count, 1);
+  assert.deepEqual(w.drafts.map((d) => d.kind), ["remind", "vacancy", "renew"]);
+  assert.match(w.drafts[0].text, /สวัสดีค่ะคุณสมชาย ค่าห้อง 201 เดือน ต.ค. 7,020 บาท เลยกำหนดมา 12 วัน/);
+  assert.equal(w.brief[0], "อรุณสวัสดิ์ครับ วันอังคารที่ 17 พฤศจิกายน");
+  assert.ok(w.brief.some((l) => l.includes("ห้อง 201 ค้าง 7,020 บาท")));
+});
