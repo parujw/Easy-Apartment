@@ -25,7 +25,7 @@ export async function shareBill(b: Bill): Promise<string> {
 }
 
 /** Send the bill to the tenant's LINE through the server (needs LINE set up + tenant linked). */
-async function sendToLine(pid: string, bill: Bill): Promise<string> {
+export async function sendToLine(pid: string, bill: Bill): Promise<string> {
   const { auth } = await import("@/lib/firebase");
   const token = await auth().currentUser?.getIdToken();
   const res = await fetch("/api/line/send", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -67,7 +67,7 @@ const tryTotal = (rows: EditRow[]) => { try { return { sum: total(rows.map(toIte
 const box = "mt-1 block w-full min-h-12 rounded-xl border border-black/15 bg-surface px-3 text-base";
 
 /** Edit an issued bill: meter lines by readings (before → after), other lines by amount. Bill number stays. */
-function BillEditor({ bill, onDone }: { bill: Bill; onDone: () => void }) {
+export function BillEditor({ bill, onDone }: { bill: Bill; onDone: () => void }) {
   const { property } = useProperty();
   const [rows, setRows] = useState<EditRow[]>(bill.items.map(toRow));
   const a = useAction();
@@ -139,7 +139,7 @@ function BillEditor({ bill, onDone }: { bill: Bill; onDone: () => void }) {
 }
 
 /** Receipts of this bill; the owner can remove one recorded by mistake. */
-function Payments({ bill }: { bill: Bill }) {
+export function Payments({ bill }: { bill: Bill }) {
   const { property, role } = useProperty();
   const list = useLive<Payment>(query(collection(db(), "properties", property.id, "payments"), where("billId", "==", bill.id)), `${property.id}/pay/${bill.id}`);
   const a = useAction();

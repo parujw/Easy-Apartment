@@ -28,7 +28,7 @@ export default function AuthForm({ initialMode }: { initialMode: "login" | "sign
         if (f.password.length < 8) throw new Error("รหัสผ่านอย่างน้อย 8 ตัวอักษร");
         await signUp(staff ? f : { ...f, invite: "" });
       }
-      router.push("/overview");
+      router.push("/rooms");
     } catch (err) {
       setError(authError(err));
     } finally {

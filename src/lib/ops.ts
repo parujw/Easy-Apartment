@@ -222,12 +222,21 @@ export const updateLease = (pid: string, id: string, data: Partial<Omit<Lease, "
 
 type NewLease = Omit<Lease, "id" | "roomId" | "tenantId" | "status">;
 
-/** New tenant into a room — now (active) or later (reserved: room held until move-in day). */
-export async function moveIn(pid: string, room: Room, tenant: Omit<Tenant, "id">, lease: NewLease, reserve = false) {
-  const t = doc(col(pid, "tenants"));
+/**
+ * New tenancy in a room — now (active) or later (reserved: room held until move-in day).
+ * `tenant` with an id = a person already on file (found by phone): no second record, their history continues.
+ */
+export async function moveIn(pid: string, room: Room, tenant: Omit<Tenant, "id"> | (Partial<Tenant> & { id: string }), lease: NewLease, reserve = false) {
+  const existing = "id" in tenant && !!tenant.id;
+  const t = existing ? ref(pid, "tenants", tenant.id as string) : doc(col(pid, "tenants"));
   const l = doc(col(pid, "leases"));
-  await one(pid, reserve ? "lease.reserve" : "lease.create", "lease", l.id, `${reserve ? "จอง" : "ผู้เช่าเข้า"}ห้อง ${room.number}: ${tenant.fullName}`, (b) => {
-    b.set(t, tenant);
+  const name = tenant.fullName ?? "";
+  await one(pid, reserve ? "lease.reserve" : "lease.create", "lease", l.id, `${reserve ? "จอง" : "ผู้เช่าเข้า"}ห้อง ${room.number}: ${name}`, (b) => {
+    if (existing) {
+      const { id: _id, ...patch } = tenant as Tenant;
+      void _id;
+      b.update(t, Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)));
+    } else b.set(t, tenant);
     b.set(l, { ...lease, roomId: room.id, tenantId: t.id, status: reserve ? "reserved" : "active", depositRefund: null });
     b.update(ref(pid, "rooms", room.id), { status: reserve ? "reserved" : "occupied" });
   });
@@ -393,7 +402,7 @@ export async function setMaintenanceStatus(pid: string, m: Maintenance, status: 
 
 export const PROPERTY_EDITABLE = ["name", "phone", "address", "promptpayId", "accountName", "docPrefix",
   "nameEn", "preparedBy", "payMethod", "accountNo", "payReference", "payNote", "lineId", "lineUrl",
-  "photo", "elecCostPerUnit", "waterCostPerUnit"] as const;
+  "photo", "elecCostPerUnit", "waterCostPerUnit", "defaultElecRate", "defaultWaterRate", "defaultDueDay"] as const;
 
 export function updateProperty(pid: string, data: Partial<Pick<Property, (typeof PROPERTY_EDITABLE)[number]>>) {
   if (data.docPrefix !== undefined && !/^[A-Z0-9]{1,6}$/.test(data.docPrefix)) throw new Error("อักษรนำหน้าเอกสาร: A-Z หรือ 0-9 ไม่เกิน 6 ตัว");

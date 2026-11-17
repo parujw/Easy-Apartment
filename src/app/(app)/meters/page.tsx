@@ -8,10 +8,11 @@ import { useProperty } from "@/components/property-provider";
 import { useData } from "@/components/data-provider";
 import { Btn, Card, useAction } from "@/components/ui";
 import { shareBill, billLink } from "@/components/bill-row";
+import { hardGo } from "@/lib/nav";
 import { editBill, issueBill, saveReadings } from "@/lib/ops";
 import { meterBill, total, type BillItem } from "@/lib/billing";
 import { carryAmount, carryOverBills, tenancyLeaseIds } from "@/lib/carry";
-import { addDays, dueDateAfterPeriod, monthRange, monthTh, periodOf, todayBkk } from "@/lib/dates";
+import { addDays, dueDateAfterPeriod, monthRange, periodOf, todayBkk } from "@/lib/dates";
 import { thb, type Bill, type MeterReading } from "@/lib/model";
 
 type Row = { elecPrev: string; elecCurr: string; waterPrev: string; waterCurr: string; other: string; discount: string };
@@ -128,98 +129,113 @@ export default function MetersPage() {
     return "คัดลอกลิงก์ทุกห้องแล้ว";
   }
 
-  const field = "w-full min-h-12 rounded-xl border border-black/15 bg-surface px-2 text-base";
+  const box = "mt-1 block w-full min-h-14 rounded-2xl bg-background px-3.5 text-xl font-semibold outline-none ring-0 focus:ring-2 focus:ring-brand";
+  const todo = prepared.filter((p) => !p.done || fixing === p.room.id);
+  const doneRows = prepared.filter((p) => p.done && fixing !== p.room.id);
+  const MONTH = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+  const shortP = (p: string) => `${MONTH[Number(p.slice(5)) - 1]} ${String(Number(p.slice(0, 4)) + 543).slice(2)}`;
   return (
     <>
-      <div className="flex items-center justify-between gap-2">
-        <h1 className="text-xl font-bold">จดมิเตอร์ &amp; ออกบิล</h1>
-        <input type="month" aria-label="รอบบิล" className="min-h-12 rounded-xl border border-black/15 bg-surface px-2" value={period} onChange={(e) => setPeriod(e.target.value)} />
-      </div>
-      <p className="mt-1 text-sm text-muted">รอบ {monthTh(period)} · กรอกเลขมิเตอร์ปัจจุบัน กด Enter เพื่อไปช่องถัดไป</p>
-      <div className="mt-3 grid grid-cols-2 gap-2">
-        <a href={`/print/slips?cycle=${period.replace("-", "")}`} target="_blank" className="flex min-h-12 items-center justify-center rounded-xl px-3 text-center text-sm font-semibold ring-1 ring-black/15">พิมพ์ใบจดมิเตอร์</a>
-        <a href="/print/slips/blank" target="_blank" className="flex min-h-12 items-center justify-center rounded-xl px-3 text-center text-sm font-semibold ring-1 ring-black/15">ใบจดมิเตอร์เปล่า</a>
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <p className="text-sm text-muted">รอบ {shortP(period)}</p>
+          <h1 className="text-[28px] font-bold leading-tight tracking-tight">จดมิเตอร์</h1>
+        </div>
+        <input type="month" aria-label="เปลี่ยนรอบบิล" className="min-h-12 rounded-2xl bg-surface px-3 ring-1 ring-line-2" value={period} onChange={(e) => setPeriod(e.target.value)} />
       </div>
 
       {list.length === 0 && <p className="mt-6 text-muted">ยังไม่มีห้องรายเดือนที่มีผู้เช่า</p>}
+      {list.length > 0 && <p className="mt-4 mb-2 px-0.5 font-semibold">{todo.length ? `เหลือ ${todo.length} ห้อง` : "ออกบิลครบทุกห้องแล้ว"}</p>}
 
-      <ul className="mt-4 space-y-2">
-        {prepared.map((p) => { const { room, r, items, error, carry, done, bill, saved, knownPrev, elecPrev, waterPrev } = p; const editing = !done || fixing === room.id; return (
-          <li key={room.id} className={`rounded-2xl p-3 ring-1 ${done ? "bg-black/5 ring-black/5" : "bg-surface ring-black/10"}`}>
-            <div className="flex items-baseline justify-between">
-              <p className="text-lg font-bold">ห้อง {room.number}</p>
-              <p className="text-sm">{done && fixing !== room.id ? <>ออกบิลแล้ว ฿{thb(bill!.total)} <button className="min-h-10 px-1 text-brand" onClick={() => setFixing(room.id)}>แก้เลข</button></>
-                : items ? <b>฿{thb(total(items))}</b> : error ? <span className="text-red-600">{error}</span> : ""}</p>
+      <ul className="space-y-2.5">
+        {todo.map((p) => { const { room, lease, r, items, error, carry, done, saved, knownPrev, elecPrev, waterPrev } = p; return (
+          <li key={room.id} className="rounded-[20px] bg-surface p-3.5 ring-1 ring-line">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-xl font-bold">{room.number} <span className="text-[15px] font-medium text-muted">{tenants.get(lease.tenantId)?.fullName ?? ""}</span></span>
+              <span className="num font-bold">{items ? `฿${thb(total(items))}` : error ? <span className="text-sm font-medium text-bad-ink">{error}</span> : ""}</span>
             </div>
-            {!done && saved && <p className="text-xs text-emerald-700">บันทึกเลขไว้แล้ว ({saved.elec} / {saved.water})</p>}
-            {!done && carry.length > 0 && (
-              <p className="mt-1 text-sm text-amber-800">ยกยอดค้างเดิม ฿{thb(carryAmount(carry))} เข้าบิลนี้ ({carry.map((b) => b.billNo).join(", ")})</p>
-            )}
-            {editing && (
-              <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
-                <label>ไฟ {knownPrev ? <span className="text-muted">(ก่อน {elecPrev})</span> : ""}
-                  {!knownPrev && <input className={field} inputMode="decimal" placeholder="เลขก่อน" data-meter value={r.elecPrev} onKeyDown={next} onChange={(e) => set(room.id, "elecPrev", e.target.value)} />}
-                  <input className={`${field} mt-1`} inputMode="decimal" enterKeyHint="next" placeholder="เลขปัจจุบัน" data-meter value={r.elecCurr} onKeyDown={next} onChange={(e) => set(room.id, "elecCurr", e.target.value)} />
-                </label>
-                <label>น้ำ {knownPrev ? <span className="text-muted">(ก่อน {waterPrev})</span> : ""}
-                  {!knownPrev && <input className={field} inputMode="decimal" placeholder="เลขก่อน" data-meter value={r.waterPrev} onKeyDown={next} onChange={(e) => set(room.id, "waterPrev", e.target.value)} />}
-                  <input className={`${field} mt-1`} inputMode="decimal" enterKeyHint="next" placeholder="เลขปัจจุบัน" data-meter value={r.waterCurr} onKeyDown={next} onChange={(e) => set(room.id, "waterCurr", e.target.value)} />
-                </label>
+            {!done && carry.length > 0 && <p className="mt-0.5 text-[13px] text-warn-ink">มียอดค้างเดิม ฿{thb(carryAmount(carry))} รวมในบิลนี้</p>}
+            {!done && saved && <p className="mt-0.5 text-[13px] text-brand">เก็บเลขไว้แล้ว {saved.elec} / {saved.water}</p>}
+            {done && <p className="mt-0.5 text-[13px] text-muted">แก้เลขของบิลที่ออกแล้ว ยอดในบิลจะเปลี่ยนตาม</p>}
+            <div className="mt-2.5 grid grid-cols-2 gap-2 text-[13px] text-muted">
+              <label>ไฟ {knownPrev ? `(ครั้งก่อน ${thb(elecPrev)})` : ""}
+                {!knownPrev && <input className={box} inputMode="decimal" placeholder="เลขครั้งก่อน" data-meter value={r.elecPrev} onKeyDown={next} onChange={(e) => set(room.id, "elecPrev", e.target.value)} />}
+                <input className={box} inputMode="decimal" enterKeyHint="next" placeholder="เลขวันนี้" data-meter value={r.elecCurr} onKeyDown={next} onChange={(e) => set(room.id, "elecCurr", e.target.value)} />
+              </label>
+              <label>น้ำ {knownPrev ? `(ครั้งก่อน ${thb(waterPrev)})` : ""}
+                {!knownPrev && <input className={box} inputMode="decimal" placeholder="เลขครั้งก่อน" data-meter value={r.waterPrev} onKeyDown={next} onChange={(e) => set(room.id, "waterPrev", e.target.value)} />}
+                <input className={box} inputMode="decimal" enterKeyHint="next" placeholder="เลขวันนี้" data-meter value={r.waterCurr} onKeyDown={next} onChange={(e) => set(room.id, "waterCurr", e.target.value)} />
+              </label>
+            </div>
+            {!done && (
+              <details className="mt-1 text-sm">
+                <summary className="flex min-h-11 cursor-pointer items-center font-semibold text-brand [&::-webkit-details-marker]:hidden">ส่วนลด ค่าอื่นๆ แก้เลขเดิม{(r.other || r.discount) && " •"}</summary>
+                <div className="grid grid-cols-2 gap-2 text-[13px] text-muted">
+                  <label>ค่าอื่นๆ<input className={box} inputMode="decimal" value={r.other} onChange={(e) => set(room.id, "other", e.target.value)} /></label>
+                  <label>ส่วนลด<input className={box} inputMode="decimal" value={r.discount} onChange={(e) => set(room.id, "discount", e.target.value)} /></label>
+                </div>
                 {knownPrev && (
-                  <button type="button" className="col-span-2 min-h-10 text-left text-sm text-brand"
+                  <button type="button" className="mt-1 min-h-11 font-semibold text-brand"
                     onClick={() => { setEditPrev(new Set(editPrev).add(room.id)); setRows((x) => ({ ...x, [room.id]: { ...(x[room.id] ?? EMPTY), elecPrev: String(elecPrev), waterPrev: String(waterPrev) } })); }}>
-                    เลขก่อนไม่ถูก? แก้เลขก่อน
+                    แก้เลขครั้งก่อน
                   </button>
                 )}
-                {!done && (
-                  <details className="col-span-2">
-                    <summary className="cursor-pointer text-muted">ค่าอื่นๆ / ส่วนลด {(r.other || r.discount) && "•"}</summary>
-                    <div className="mt-1 grid grid-cols-2 gap-2">
-                      <label>ค่าอื่นๆ<input className={field} inputMode="decimal" value={r.other} onChange={(e) => set(room.id, "other", e.target.value)} /></label>
-                      <label>ส่วนลด<input className={field} inputMode="decimal" value={r.discount} onChange={(e) => set(room.id, "discount", e.target.value)} /></label>
-                    </div>
-                  </details>
-                )}
-                {done && (
-                  <div className="col-span-2 grid grid-cols-2 gap-2">
-                    <Btn kind="ghost" onClick={() => setFixing(null)}>ยกเลิก</Btn>
-                    <Btn disabled={a.busy || !items} onClick={() => a.run(() => updateIssued(p))}>อัปเดตบิล</Btn>
-                  </div>
-                )}
+              </details>
+            )}
+            {done && (
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <Btn kind="ghost" onClick={() => setFixing(null)}>ยกเลิก</Btn>
+                <Btn kind="ghost" className="!bg-brand !text-white !ring-0" disabled={a.busy || !items} onClick={() => a.run(() => updateIssued(p))}>อัปเดตบิล</Btn>
               </div>
             )}
           </li>
         ); })}
       </ul>
 
-      {list.length > 0 && (
-        <div className="sticky bottom-20 mt-4">
-          {toSave.length > 0 && (
-            <Btn kind="ghost" className="mb-2 w-full bg-surface shadow" disabled={a.busy} onClick={() => a.run(saveOnly)}>บันทึกเลขอย่างเดียว ({toSave.length} ห้อง)</Btn>
-          )}
-          <Btn className="w-full shadow-lg" disabled={a.busy || !ready.length} onClick={() => a.run(issueAll)}>
-            {a.busy ? `กำลังออกบิล… ${issued.length}/${ready.length}` : `ออกบิล ${ready.length} ห้อง · ฿${thb(ready.reduce((s, p) => s + total(p.items!), 0))}`}
-          </Btn>
-          {a.view}
-        </div>
+      {doneRows.length > 0 && (
+        <details className="mt-3 overflow-hidden rounded-[20px] bg-surface ring-1 ring-line">
+          <summary className="flex min-h-14 cursor-pointer items-center justify-between px-4 font-semibold [&::-webkit-details-marker]:hidden">
+            ออกบิลแล้ว {doneRows.length} ห้อง <span className="font-normal text-muted">ดู</span>
+          </summary>
+          {doneRows.map(({ room, bill }) => (
+            <div key={room.id} className="flex min-h-14 items-center justify-between gap-2 border-t border-line px-4">
+              <span><b>{room.number}</b> <span className="num text-muted">฿{thb(bill!.total)}</span></span>
+              <button className="min-h-11 px-2 font-semibold text-brand" onClick={() => setFixing(room.id)}>แก้เลข</button>
+            </div>
+          ))}
+        </details>
       )}
 
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <Btn kind="ghost" onClick={() => hardGo(`/print/slips?cycle=${period.replace("-", "")}`)}>พิมพ์ใบจดมิเตอร์</Btn>
+        <Btn kind="ghost" onClick={() => hardGo("/print/slips/blank")}>ใบเปล่า</Btn>
+      </div>
+
       {issued.length > 0 && (
-        <Card className="mt-4">
+        <Card className="mt-3">
           <div className="flex items-center justify-between gap-2">
             <h2 className="font-semibold">ส่งบิลให้ผู้เช่า</h2>
-            <Btn kind="ghost" onClick={() => a.run(copyAll)}>คัดลอกทั้งหมด</Btn>
+            <Btn kind="text" onClick={() => a.run(copyAll)}>คัดลอกทั้งหมด</Btn>
           </div>
-          <ul className="mt-2 divide-y divide-black/5">
-            {issued.map((b) => (
-              <li key={b.id} className="flex items-center justify-between gap-2 py-2">
-                <span>ห้อง {b.roomNumber} · ฿{thb(b.total)}</span>
-                <Btn kind="ghost" onClick={() => a.run(() => shareBill(b))}>ส่ง</Btn>
-              </li>
-            ))}
-          </ul>
+          {issued.map((b) => (
+            <div key={b.id} className="flex min-h-14 items-center justify-between gap-2 border-t border-line">
+              <span>ห้อง {b.roomNumber} · <span className="num">฿{thb(b.total)}</span></span>
+              <Btn kind="ghost" onClick={() => a.run(() => shareBill(b))}>ส่ง</Btn>
+            </div>
+          ))}
         </Card>
       )}
+
+      {list.length > 0 && <div className="h-24" />}
+      {list.length > 0 && (ready.length > 0 || toSave.length > 0) && (
+        <div className="fixed inset-x-4 bottom-[calc(1rem+68px+12px+env(safe-area-inset-bottom))] z-30 mx-auto grid max-w-[440px] grid-cols-[1fr_2fr] gap-2">
+          <Btn kind="ghost" className="shadow-[0_2px_10px_rgba(16,24,40,.08)]" disabled={a.busy || !toSave.length} onClick={() => a.run(saveOnly)}>เก็บเลขไว้</Btn>
+          <Btn className="shadow-[0_6px_16px_rgba(14,124,110,.3)]" disabled={a.busy || !ready.length} onClick={() => a.run(issueAll)}>
+            {a.busy ? `กำลังออกบิล ${issued.length}/${ready.length}` : `ออกบิล ${ready.length} ห้อง ฿${thb(ready.reduce((s, p) => s + total(p.items!), 0))}`}
+          </Btn>
+        </div>
+      )}
+      {a.view}
     </>
   );
 }

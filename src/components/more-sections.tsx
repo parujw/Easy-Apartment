@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import Link from "next/link";
 import { collection, doc, getDoc, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -18,9 +18,13 @@ import { PLANS } from "@/lib/plans";
 import { isoTh, monthRange, monthTh, periodOf, todayBkk } from "@/lib/dates";
 import { EXPENSE_CATEGORIES, thb, type Expense, type Maintenance } from "@/lib/model";
 
+/** Inside the money menu each topic opens as its own page: then a Section is plain content (title shown by the page). */
+export const FullPage = createContext(false);
 export function Section({ title, children, open = false }: { title: string; children: React.ReactNode; open?: boolean }) {
+  const full = useContext(FullPage);
+  if (full) return <div className="space-y-3">{children}</div>;
   return (
-    <details open={open} className="rounded-2xl bg-surface ring-1 ring-black/10 [&_summary::-webkit-details-marker]:hidden">
+    <details open={open} className="rounded-[20px] bg-surface ring-1 ring-line [&_summary::-webkit-details-marker]:hidden">
       <summary className="flex min-h-14 cursor-pointer items-center justify-between px-4 font-semibold">{title}<span className="text-muted">›</span></summary>
       <div className="px-4 pb-4">{children}</div>
     </details>

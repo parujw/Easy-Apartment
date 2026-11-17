@@ -16,6 +16,8 @@ export type Property = {
   /** LINE account tenants send meter slips / payment slips to */
   lineId?: string; lineUrl?: string;
   photo?: string; elecCostPerUnit?: number; waterCostPerUnit?: number;
+  /** building defaults used for every new tenancy (owner can still agree a special price per tenant) */
+  defaultElecRate?: number; defaultWaterRate?: number; defaultDueDay?: number;
   members?: Record<string, "owner" | "assistant" | "viewer">;
 };
 

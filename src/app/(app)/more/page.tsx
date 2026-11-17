@@ -8,7 +8,12 @@ import { useLive } from "@/lib/hooks";
 import { useProperty } from "@/components/property-provider";
 import { useData } from "@/components/data-provider";
 import { Btn, Field, NumField, Select, useAction } from "@/components/ui";
-import { BuildingSection, ExpensesSection, ImportSection, LineSection, ListsSection, MaintenanceHistory, TeamSection } from "@/components/more-sections";
+import { BuildingSection, ExpensesSection, FullPage, ImportSection, LineSection, MaintenanceHistory, Section, TeamSection } from "@/components/more-sections";
+import Link from "next/link";
+import { Row } from "@/components/ui";
+import { hardGo } from "@/lib/nav";
+import { collectionByPeriod, periodsBack } from "@/lib/insights";
+import type { Bill } from "@/lib/model";
 import { addRooms, roomDefaults, setMaintenanceStatus, updateProperty } from "@/lib/ops";
 import { promptPayPayload } from "@/lib/promptpay";
 import { parseRoomNumbers } from "@/lib/rooms";
@@ -16,15 +21,6 @@ import { billedRevenue } from "@/lib/carry";
 import { PLANS } from "@/lib/plans";
 import { dateTh, daysLeftTs, isoTh, monthRange, monthTh, periodOf, todayBkk } from "@/lib/dates";
 import { KIND_TH, METHOD_TH, balance, thb, type Expense, type Maintenance, type Payment, type Room } from "@/lib/model";
-
-function Section({ title, children, open = false }: { title: string; children: React.ReactNode; open?: boolean }) {
-  return (
-    <details open={open} className="rounded-2xl bg-surface ring-1 ring-black/10 [&_summary::-webkit-details-marker]:hidden">
-      <summary className="flex min-h-14 cursor-pointer items-center justify-between px-4 font-semibold">{title}<span className="text-muted">›</span></summary>
-      <div className="px-4 pb-4">{children}</div>
-    </details>
-  );
-}
 
 const csv = (rows: (string | number)[][]) => "﻿" + rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
 
@@ -152,6 +148,7 @@ function SettingsSection() {
     accountNo: property.accountNo ?? "", payReference: property.payReference ?? "", payNote: property.payNote ?? "",
     lineId: property.lineId ?? "", lineUrl: property.lineUrl ?? "",
   });
+  const [d, setD] = useState({ elec: (property.defaultElecRate ?? "") as number | "", water: (property.defaultWaterRate ?? "") as number | "", due: (property.defaultDueDay ?? "") as number | "" });
   const a = useAction();
   return (
     <Section title="ตั้งค่าหอพัก">
@@ -162,6 +159,12 @@ function SettingsSection() {
         <Field label="PromptPay (เบอร์มือถือหรือเลขบัตร)" inputMode="numeric" value={f.promptpayId} onChange={(e) => setF({ ...f, promptpayId: e.target.value })} />
         <Field label="ชื่อบัญชีผู้รับเงิน" value={f.accountName} onChange={(e) => setF({ ...f, accountName: e.target.value })} />
         <Field label="อักษรนำหน้าเลขใบแจ้งหนี้" value={f.docPrefix} onChange={(e) => setF({ ...f, docPrefix: e.target.value.toUpperCase() })} />
+        <p className="pt-2 text-sm font-semibold">ค่าตั้งต้นของผู้เช่าใหม่ทุกคน</p>
+        <div className="grid grid-cols-3 gap-2">
+          <NumField label="ไฟ บาท/หน่วย" value={d.elec} onChange={(v) => setD({ ...d, elec: v })} />
+          <NumField label="น้ำ บาท/หน่วย" value={d.water} onChange={(v) => setD({ ...d, water: v })} />
+          <NumField label="จ่ายทุกวันที่" value={d.due} onChange={(v) => setD({ ...d, due: v })} />
+        </div>
         <p className="pt-2 text-sm font-semibold">หัวและท้ายใบแจ้งหนี้</p>
         <Field label="ชื่อภาษาอังกฤษ (หัวใบ เช่น WILAI PLACE)" value={f.nameEn} onChange={(e) => setF({ ...f, nameEn: e.target.value })} />
         <Field label="ผู้จัดทำ (ท้ายใบ)" placeholder="ผู้จัดการ" value={f.preparedBy} onChange={(e) => setF({ ...f, preparedBy: e.target.value })} />
@@ -175,7 +178,8 @@ function SettingsSection() {
         <Btn className="w-full" disabled={a.busy} onClick={() => a.run(async () => {
           if (f.promptpayId.trim()) promptPayPayload(f.promptpayId); // throws a Thai message if the ID is invalid
           if (f.lineUrl && !/^https:\/\//.test(f.lineUrl)) throw new Error("ลิงก์ LINE ต้องขึ้นต้นด้วย https://");
-          await updateProperty(property.id, { ...f, name: f.name.trim(), promptpayId: f.promptpayId.replace(/\D/g, "") });
+          await updateProperty(property.id, { ...f, name: f.name.trim(), promptpayId: f.promptpayId.replace(/\D/g, ""),
+            ...(d.elec !== "" && { defaultElecRate: d.elec }), ...(d.water !== "" && { defaultWaterRate: d.water }), ...(d.due !== "" && { defaultDueDay: Math.min(28, Math.max(1, d.due)) }) });
           return "บันทึกแล้ว บิลที่ออกต่อจากนี้ใช้ข้อมูลใหม่";
         })}>บันทึก</Btn>
       </div>
@@ -225,34 +229,85 @@ function AccountSection() {
   );
 }
 
+type Topic = { key: string; label: string; hint?: string; owner?: boolean; writer?: boolean; href?: string; node?: React.ReactNode };
+
+const M = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+
+/** Money tab: this month's numbers on top, then one list — each topic opens as its own page. */
 export default function MorePage() {
-  const { role } = useProperty();
-  const owner = role === "owner";
+  const { property, role } = useProperty();
+  const { openBills } = useData();
+  const [view, setView] = useState<string | null>(null);
+  const period = periodOf(todayBkk());
+  const periods = periodsBack(period, 6);
+  const bills = useLive<Bill>(query(collection(db(), "properties", property.id, "bills"), where("period", ">=", periods[0])), `${property.id}/bills/p/${periods[0]}`);
+  const { start, end } = monthRange(period);
+  const expenses = useLive<Expense>(query(collection(db(), "properties", property.id, "expenses"), where("spentOn", ">=", start), where("spentOn", "<=", end)), `${property.id}/exp/${period}`);
+  const coll = collectionByPeriod(bills.filter((b) => b.status !== "void"), periods);
+  const got = coll[coll.length - 1]?.collected ?? 0, spent = expenses.reduce((s, e) => s + e.amount, 0);
+  const max = Math.max(1, ...coll.map((c) => c.collected));
+  const owed = openBills.reduce((s, b) => s + balance(b), 0);
+  const writer = role !== "viewer", owner = role === "owner";
+
+  const topics: Topic[] = [
+    { key: "summary", label: "สรุปเดือน", hint: "รับ จ่าย ดาวน์โหลด", node: <MonthSummary /> },
+    { key: "owed", label: "ยังไม่จ่าย", hint: openBills.length ? `${new Set(openBills.map((b) => b.roomId)).size} ห้อง ฿${thb(owed)}` : "ไม่มี", href: "/bills?status=open" },
+    { key: "expenses", label: "รายจ่าย", hint: `฿${thb(spent)}`, node: <ExpensesSection /> },
+    { key: "repairs", label: "งานซ่อม", node: <><MaintenanceSection /><MaintenanceHistory /></> },
+    { key: "tenants", label: "ผู้เช่า", href: "/tenants" },
+    { key: "bills", label: "บิลย้อนหลัง", href: "/bills" },
+    { key: "insights", label: "วิเคราะห์ธุรกิจ", hint: "อายุหนี้ ประมาณการ", href: "/insights" },
+    { key: "print", label: "เอกสารพิมพ์", hint: "ใบจดมิเตอร์ ใบเตือน", node: (
+      <div className="overflow-hidden rounded-[20px] bg-surface ring-1 ring-line">
+        <Row label="ใบจดมิเตอร์ ทุกห้อง" onClick={() => hardGo("/print/slips")} />
+        <Row label="ใบจดมิเตอร์เปล่า" onClick={() => hardGo("/print/slips/blank")} />
+        <Row label="ใบเตือนค้างจ่าย ติดประตู" onClick={() => hardGo("/print/notices")} />
+      </div>) },
+    { key: "rooms", label: "ห้องพัก", hint: "เพิ่มห้อง", writer: true, node: <RoomsSection /> },
+    { key: "import", label: "นำเข้าจาก Excel", owner: true, node: <ImportSection /> },
+    { key: "settings", label: "ตั้งค่าหอพัก", hint: "ค่าตั้งต้น ใบแจ้งหนี้", owner: true, node: <SettingsSection /> },
+    { key: "building", label: "อาคาร", hint: "รูป ต้นทุนน้ำไฟ สลับอาคาร", node: <BuildingSection /> },
+    { key: "team", label: "ทีมงาน", owner: true, node: <TeamSection /> },
+    { key: "line", label: "LINE", node: <LineSection /> },
+    { key: "plan", label: "แพ็กเกจ", node: <PlanSection /> },
+    { key: "account", label: "บัญชีของฉัน", hint: "รหัสผ่าน ออกจากระบบ", node: <AccountSection /> },
+  ].filter((t) => (!t.owner || owner) && (!t.writer || writer));
+
+  const open = topics.find((t) => t.key === view);
+  if (open?.node) return (
+    <div>
+      <button className="min-h-12 font-semibold" onClick={() => setView(null)}>‹ การเงิน</button>
+      <h1 className="mb-3 text-[28px] font-bold tracking-tight">{open.label}</h1>
+      <FullPage.Provider value={true}>{open.node}</FullPage.Provider>
+    </div>
+  );
+
   return (
     <div className="space-y-3">
-      <h1 className="text-xl font-bold">เงิน &amp; อื่นๆ</h1>
-      {role === "viewer" && <p className="rounded-xl bg-sky-50 p-3 text-sm text-sky-900">บัญชีนี้ดูข้อมูลได้อย่างเดียว</p>}
-      <ListsSection />
-      <MonthSummary />
-      <ExpensesSection />
-      <Section title="เอกสารสำหรับพิมพ์">
-        <div className="grid gap-2">
-          <a href="/print/slips" target="_blank" className="flex min-h-12 items-center rounded-xl px-4 ring-1 ring-black/15">ใบจดมิเตอร์ (ทุกห้อง)</a>
-          <a href="/print/slips/blank" target="_blank" className="flex min-h-12 items-center rounded-xl px-4 ring-1 ring-black/15">ใบจดมิเตอร์เปล่า</a>
-          <a href="/print/notices" target="_blank" className="flex min-h-12 items-center rounded-xl px-4 ring-1 ring-black/15">ใบเตือนค้างชำระติดประตู</a>
-          <p className="text-sm text-muted">ใบแจ้งหนี้ A4: แตะห้อง → บิล → ปุ่ม “พิมพ์”</p>
+      <p className="text-sm text-muted">{monthTh(period)}</p>
+      <h1 className="-mt-3 text-[28px] font-bold tracking-tight">การเงิน</h1>
+      {role === "viewer" && <p className="rounded-2xl bg-line p-3 text-sm text-ink-2">บัญชีนี้ดูได้อย่างเดียว</p>}
+      <div className="grid grid-cols-2 gap-2">
+        <div className="rounded-[20px] bg-surface p-4 ring-1 ring-line"><p className="text-sm text-muted">กำไร</p><p className="num text-2xl font-bold text-brand">฿{thb(got - spent)}</p></div>
+        <div className="rounded-[20px] bg-surface p-4 ring-1 ring-line"><p className="text-sm text-muted">รายจ่าย</p><p className="num text-2xl font-bold">฿{thb(spent)}</p></div>
+      </div>
+      <div className="rounded-[20px] bg-surface p-4 ring-1 ring-line">
+        <p className="text-sm text-muted">เก็บได้ 6 เดือนล่าสุด</p>
+        <div className="mt-3 grid h-28 grid-cols-6 items-end gap-2.5">
+          {coll.map((c, i) => (
+            <div key={c.period} className="flex h-full flex-col items-center justify-end gap-1" title={`${monthTh(c.period)} เก็บได้ ฿${thb(c.collected)}`}>
+              <span className="num text-[11px] text-muted">{c.collected ? `${Math.round(c.collected / 1000)}k` : ""}</span>
+              <div className={`w-full rounded-t-[4px] ${i === coll.length - 1 ? "bg-brand" : "bg-[#cceee6]"}`} style={{ height: `${Math.max(2, (c.collected / max) * 70)}px` }} />
+              <span className="text-[11px] text-muted">{M[Number(c.period.slice(5)) - 1]}</span>
+            </div>
+          ))}
         </div>
-      </Section>
-      <MaintenanceSection />
-      <MaintenanceHistory />
-      {role !== "viewer" && <RoomsSection />}
-      {owner && <ImportSection />}
-      {owner && <SettingsSection />}
-      <BuildingSection />
-      {owner && <TeamSection />}
-      <LineSection />
-      <PlanSection />
-      <AccountSection />
+      </div>
+      <div className="overflow-hidden rounded-[20px] bg-surface ring-1 ring-line">
+        {topics.map((t) => t.href
+          ? <Link key={t.key} href={t.href} className="flex min-h-14 items-center justify-between gap-3 border-t border-line px-4 first:border-t-0"><span className="font-medium">{t.label}</span><span className="text-muted">{t.hint} <span className="text-line-2">›</span></span></Link>
+          : <Row key={t.key} label={t.label} value={t.hint} onClick={() => setView(t.key)} />)}
+      </div>
     </div>
   );
 }

@@ -16,7 +16,9 @@ const FILTERS: [BillStatus | "all" | "open", string][] = [["open", "ค้าง
 export default function BillsPage() {
   const { property } = useProperty();
   const [period, setPeriod] = useState(periodOf(todayBkk()));
-  const [status, setStatus] = useState<(typeof FILTERS)[number][0]>("all");
+  // /bills?status=open from the money tab's "ยังไม่จ่าย" (this page only renders in the browser, after the data loads)
+  const [status, setStatus] = useState<(typeof FILTERS)[number][0]>(() =>
+    typeof window !== "undefined" && new URLSearchParams(window.location.search).get("status") === "open" ? "open" : "all");
   const [room, setRoom] = useState("");
   const list = useLive<Bill>(query(collection(db(), "properties", property.id, "bills"), where("period", "==", period)), `${property.id}/bills/=${period}`);
   const shown = list

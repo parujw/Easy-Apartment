@@ -227,3 +227,20 @@ test("bill editor helpers: meter labels and rebuilt lines", () => {
   assert.equal(amountItem("discount", "ส่วนลด", 1, 200).amount, -200);
   assert.equal(amountItem("rent", "ค่าเช่าห้อง", 1, 3200.5).amount, 3200.5);
 });
+
+import { roomState, readingsFor } from "./room-state.ts";
+test("room state: one answer for grid, picker and sheet", () => {
+  const room = { id: "r1", kind: "monthly", status: "occupied" };
+  const ctx = { hasLease: true, reserved: false, bookings: [], period: "2026-11", today: "2026-11-17" };
+  const bill = (o: object) => ({ id: "b", roomId: "r1", period: "2026-11", dueDate: "2026-12-05", total: 4000, paid: 0, status: "unpaid", leaseId: "l1", ...o });
+  assert.equal(roomState(room, { ...ctx, bills: [] }).key, "todo");
+  assert.equal(roomState(room, { ...ctx, bills: [bill({})] }).key, "due");
+  assert.equal(roomState(room, { ...ctx, bills: [bill({ status: "paid", paid: 4000 })] }).key, "paid");
+  const late = roomState(room, { ...ctx, bills: [bill({ period: "2026-10", dueDate: "2026-11-05" })] });
+  assert.equal(late.key, "late"); assert.equal(late.lateDays, 12); assert.equal(late.owed, 4000);
+  assert.equal(roomState(room, { ...ctx, hasLease: false, bills: [] }).key, "vacant");
+  assert.equal(roomState({ ...room, kind: "daily" }, { ...ctx, hasLease: false, bills: [], bookings: [{ roomId: "r1", status: "checked_in", checkIn: "2026-11-16", checkOut: "2026-11-18" }] }).key, "staying");
+  const rs = [{ roomId: "r1", readOn: "2026-10-31", period: "2026-10", elec: 1 }, { roomId: "r1", readOn: "2026-11-30", elec: 2 }, { roomId: "r2", readOn: "2026-10-01", elec: 9 }];
+  const { prev, saved } = readingsFor(rs, "r1", "2026-11");
+  assert.equal(prev?.elec, 1); assert.equal(saved?.elec, 2);
+});
