@@ -3,21 +3,16 @@
 // Meter-reading slips for tenants — A4, 2 per sheet, same layout as Wilai Communities V3 (/meter/slips).
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { collection, query, where } from "firebase/firestore";
-import { db } from "@/lib/firebase";
-import { useLive } from "@/lib/hooks";
 import { useProperty } from "@/components/property-provider";
 import { useData } from "@/components/data-provider";
 import PrintBar from "@/components/print-bar";
 import SendToLine from "@/components/send-to-line";
-import { addDays, todayBkk } from "@/lib/dates";
+import { todayBkk } from "@/lib/dates";
 import { chunk, cycleLabel, localPhone, slipDueDate, thaiDate } from "@/lib/thai-format";
-import type { MeterReading } from "@/lib/model";
 
 const SLIPS_PER_PAGE = 2;
 const DEFAULT_DUE_DAY = 25;
-// No previous reading prints a dash, never 0 (0 makes tenants think the meter is broken)
-const previousText = (v: number | null) => (v === null ? "—" : v.toLocaleString("th-TH"));
+// Tenants write only today's number: printing last month's reading next to it confused them.
 
 export default function Slips() {
   const sp = useSearchParams();
@@ -28,19 +23,12 @@ export default function Slips() {
   const dueDay = /^\d{1,2}$/.test(sp.get("due") ?? "") ? Number(sp.get("due")) : DEFAULT_DUE_DAY;
   const roomParam = sp.get("room");
   const dueDate = slipDueDate(cycle, dueDay);
-  const since = addDays(today, -400);
-  const readings = useLive<MeterReading>(
-    query(collection(db(), "properties", property.id, "meterReadings"), where("readOn", ">=", since)), `${property.id}/slipread/${since}`);
-  const cyclePeriod = `${cycle.slice(0, 4)}-${cycle.slice(4, 6)}`;
 
   const slips = rooms
     .filter((r) => activeLease.has(r.id) && (!roomParam || r.number === roomParam))
     .map((r) => {
       const tenant = tenants.get(activeLease.get(r.id)!.tenantId);
-      const prev = readings
-        .filter((m) => m.roomId === r.id && (m.period ?? m.readOn.slice(0, 7)) < cyclePeriod)
-        .sort((a, b) => b.readOn.localeCompare(a.readOn))[0];
-      return { roomNo: r.number, tenantName: tenant?.fullName ?? "", elecPrevious: prev?.elec ?? null, waterPrevious: prev?.water ?? null, readAt: prev?.readOn ?? null };
+      return { roomNo: r.number, tenantName: tenant?.fullName ?? "" };
     })
     .sort((a, b) => a.roomNo.localeCompare(b.roomNo, "th", { numeric: true }));
   const phone = localPhone(property.phone);
@@ -78,27 +66,20 @@ export default function Slips() {
                   <thead>
                     <tr>
                       <th className="what">มิเตอร์</th>
-                      <th className="prev">เลขครั้งก่อน{slip.readAt ? <span className="when"> ({thaiDate(slip.readAt)})</span> : null}</th>
-                      <th className="fix">แก้ให้ถูก (ถ้าไม่ตรง)</th>
-                      <th className="now">เลขครั้งนี้ — เขียนในช่องนี้</th>
+                      <th className="now">เลขบนหน้าปัดวันนี้ — เขียนทุกหลัก</th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr>
                       <td className="what">ไฟฟ้า <span className="unit">(หน่วย)</span></td>
-                      <td className="prev">{previousText(slip.elecPrevious)}</td>
-                      <td className="fix"><span className="box soft" /></td>
                       <td className="now"><span className="box" /></td>
                     </tr>
                     <tr>
                       <td className="what">น้ำ <span className="unit">(หน่วย)</span></td>
-                      <td className="prev">{previousText(slip.waterPrevious)}</td>
-                      <td className="fix"><span className="box soft" /></td>
                       <td className="now"><span className="box" /></td>
                     </tr>
                   </tbody>
                 </table>
-                <p className="hint">ช่อง <strong>แก้ให้ถูก</strong> เขียนเฉพาะกรณีเลขครั้งก่อนที่พิมพ์มาไม่ตรงกับหน้าปัดจริง ถ้าตรงอยู่แล้วเว้นว่างไว้</p>
                 <div className="fill">
                   <span className="field">วันที่จด <span className="rule short" /></span>
                   <span className="field">ผู้จด <span className="rule" /></span>

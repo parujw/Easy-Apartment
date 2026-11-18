@@ -64,19 +64,17 @@ export default function BlankSlips() {
               </div>
               <table className="reads blank-reads">
                 <thead>
-                  <tr><th className="what">มิเตอร์</th><th className="prev-box">เลขครั้งก่อน (ถ้าทราบ)</th><th className="now">เลขครั้งนี้ — เขียนในช่องนี้</th></tr>
+                  <tr><th className="what">มิเตอร์</th><th className="now">เลขบนหน้าปัดวันนี้ — เขียนทุกหลัก</th></tr>
                 </thead>
                 <tbody>
                   {(["ไฟฟ้า", "น้ำ"] as const).map((meter) => (
                     <tr key={meter}>
                       <td className="what">{meter} <span className="unit">(หน่วย)</span></td>
-                      <td className="prev-box"><span className="box soft" /></td>
                       <td className="now"><span className="box" /></td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              <p className="hint"><strong>เลขครั้งก่อน</strong> ดูจากใบหรือบิลเดือนที่แล้ว ถ้าไม่ทราบเว้นว่างไว้ เจ้าหน้าที่จะเทียบให้เอง</p>
               <div className="fill">
                 <span className="field">วันที่จด <span className="rule short" /></span>
                 <span className="field">ผู้จด <span className="rule" /></span>
