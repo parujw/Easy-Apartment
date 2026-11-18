@@ -194,7 +194,7 @@ function BillPanel({ bill, tenant, setPanel, onClose, back, today }: Common & { 
     open ? { label: "รับเงิน", icon: "M2 6h20v12H2zM2 10h20M6 15h4", run: () => setPanel({ name: "pay", billId: bill.id }), main: true, off: !canWrite }
       : { label: "ใบเสร็จ", icon: "M6 2h12v20l-3-2-3 2-3-2-3 2zM9 7h6M9 11h6", run: () => a.run(() => shareBill(bill)), main: true },
     { label: "ส่ง", icon: "M22 2L11 13M22 2l-7 20-4-9-9-4z", run: send },
-    { label: "พิมพ์", icon: "M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z", run: () => go(`/api/pdf/invoice/${bill.publicToken}`) },
+    { label: "พิมพ์", icon: "M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z", run: () => go(`/print/invoice/${bill.publicToken}`) },
     { label: "แก้ไข", icon: "M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z", run: () => setPanel({ name: "edit-bill", billId: bill.id }), off: !canWrite || bill.status === "void" || bill.status === "carried" },
   ];
   return (
@@ -356,7 +356,7 @@ function DonePanel({ bill, room, tenant, setPanel, onClose }: Common & { bill: B
             {tenant?.lineUserId ? "ส่งทาง LINE" : "ส่งลิงก์ให้ผู้เช่า"}
           </Btn>
           <div className="grid grid-cols-2 gap-2">
-            <Btn kind="ghost" onClick={() => go(`/api/pdf/invoice/${bill.publicToken}`)}>พิมพ์</Btn>
+            <Btn kind="ghost" onClick={() => go(`/print/invoice/${bill.publicToken}`)}>พิมพ์</Btn>
             <Btn kind="ghost" onClick={() => setPanel({ name: "main" })}>เสร็จ</Btn>
           </div>
         </div>

@@ -93,7 +93,7 @@ export default function PublicBill({ params }: { params: Promise<{ token: string
         )}
         <p className="mt-4 text-center text-xs text-muted">ออกเมื่อ {isoTh(bill.issueDate)} · {bill.billNo} · ส่งบิลด้วย Easy Apartment</p>
       </article>
-      <a href={`/api/pdf/invoice/${token}?openExternalBrowser=1`} className="mt-4 flex min-h-12 w-full items-center justify-center rounded-xl bg-brand font-semibold text-white print:hidden">ใบแจ้งหนี้ A4 (PDF)</a>
+      <a href={`/print/invoice/${token}`} className="mt-4 flex min-h-12 w-full items-center justify-center rounded-xl bg-brand font-semibold text-white print:hidden">ใบแจ้งหนี้ A4 · พิมพ์ / PDF</a>
     </main>
   );
 }

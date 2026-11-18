@@ -9,6 +9,12 @@ import { db } from "@/lib/firebase";
 import { promptPayPayload } from "@/lib/promptpay";
 import { BILL_STATUS_LABEL, baht, cycleLabel, cycleOf, localPhone, thaiDate } from "@/lib/thai-format";
 import PrintBar from "@/components/print-bar";
+
+/** "ค่าไฟ (8862 → 8937)": the arrow is drawn, not typed — server PDFs have no font with "→" and showed a box. */
+function Arrowed({ text }: { text: string }) {
+  const parts = text.split("→");
+  return <span style={parts.length > 1 ? { whiteSpace: "nowrap" } : undefined}>{parts.map((p, i) => <span key={i}>{i > 0 && <svg width="0.85em" height="0.6em" viewBox="0 0 14 10" style={{ margin: "0 .25em", verticalAlign: "0.05em" }} aria-label="ถึง"><path d="M1 5h11M8 1l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>}{p}</span>)}</span>;
+}
 import type { BillItem } from "@/lib/billing";
 
 type PublicBill = {
@@ -54,7 +60,7 @@ export default function InvoicePrint({ params }: { params: Promise<{ token: stri
 
   return (
     <main className="sheet">
-      <PrintBar backHref={`/b/${token}`} />
+      <PrintBar backHref={`/b/${token}`} pdfHref={`/api/pdf/invoice/${token}`} />
 
       {/* the whole sheet is a table so the header repeats on every printed page */}
       <table className="doc">
@@ -112,7 +118,7 @@ export default function InvoicePrint({ params }: { params: Promise<{ token: stri
                   {bill.items.map((line, i) => (
                     <tr key={`${line.kind}-${i}`}>
                       <td>
-                        {line.label}
+                        <Arrowed text={line.label} />
                         {line.kind === "rent" ? ` — เดือน${cycleLabel(cycle, "full")}` : null}
                         {line.qty !== 1 ? <span className="qty"> · {line.qty} หน่วย × {line.unitPrice} บาท</span> : null}
                       </td>

@@ -12,7 +12,7 @@ const isAndroid = (ua: string) => /Android/i.test(ua);
 const useUA = () => useSyncExternalStore(() => () => {}, () => navigator.userAgent, () => "");
 
 /** Top bar on print pages, styled like the app; hidden when printing (.print-bar is display:none in print CSS). */
-export default function PrintBar({ backHref }: { backHref: string }) {
+export default function PrintBar({ backHref, pdfHref }: { backHref: string; pdfHref?: string }) {
   const ua = useUA();
   const [stuck, setStuck] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -56,14 +56,18 @@ export default function PrintBar({ backHref }: { backHref: string }) {
     <div className="print-bar fixed inset-x-0 top-0 z-10 border-b border-black/10 bg-background/95 backdrop-blur" style={{ fontFamily: "var(--app-font)" }}>
       <div className="mx-auto flex max-w-3xl items-center justify-between gap-2 px-4 py-2">
         <button type="button" onClick={back} className="min-h-12 rounded-xl bg-surface px-4 font-semibold text-foreground ring-1 ring-black/15">‹ กลับ</button>
-        <button type="button" onClick={print} className="min-h-12 rounded-xl bg-[var(--app-brand)] px-5 font-semibold text-white">
-          {inLine(ua) ? "เปิดในเบราว์เซอร์เพื่อพิมพ์" : "พิมพ์ / บันทึก PDF"}
-        </button>
+        <div className="flex gap-2">
+          {pdfHref && <a href={pdfHref} className="flex min-h-12 items-center rounded-xl bg-surface px-4 font-semibold text-foreground ring-1 ring-black/15">PDF</a>}
+          <button type="button" onClick={print} className="min-h-12 rounded-xl bg-[var(--app-brand)] px-5 font-semibold text-white">
+            {inLine(ua) ? "เปิดในเบราว์เซอร์เพื่อพิมพ์" : "พิมพ์"}
+          </button>
+        </div>
       </div>
       {stuck && (
         <div role="alert" className="mx-auto max-w-3xl space-y-2 px-4 pb-3 text-sm text-foreground">
           <p className="font-semibold">หน้านี้เปิดอยู่ในแอป ซึ่งสั่งพิมพ์ไม่ได้</p>
-          <p>เปิดใน{isAndroid(ua) ? " Chrome" : " Safari"} แล้วกดพิมพ์อีกครั้ง{isIOS(ua) ? " (หรือกดปุ่มเข็มทิศ 🧭 / เมนู ⋯ → “เปิดใน Safari”)" : " (หรือกดเมนู ⋮ → “เปิดในเบราว์เซอร์”)"}</p>
+          {pdfHref && <p>ทางที่ง่ายที่สุด: แตะ <b>PDF</b> ด้านบน แล้วกดปุ่มแชร์ (สี่เหลี่ยมลูกศรขึ้น) เลือก “พิมพ์” หรือ “บันทึกลงไฟล์”</p>}
+          <p>หรือเปิดใน{isAndroid(ua) ? " Chrome" : " Safari"} แล้วกดพิมพ์อีกครั้ง{isIOS(ua) ? " (หรือกดปุ่มเข็มทิศ 🧭 / เมนู ⋯ → “เปิดใน Safari”)" : " (หรือกดเมนู ⋮ → “เปิดในเบราว์เซอร์”)"}</p>
           <div className="grid grid-cols-2 gap-2">
             <button type="button" onClick={openInBrowser} className="min-h-12 rounded-xl bg-[var(--app-brand)] px-3 font-semibold text-white">
               เปิดใน{isAndroid(ua) ? " Chrome" : " Safari"}
