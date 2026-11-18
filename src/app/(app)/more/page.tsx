@@ -12,8 +12,7 @@ import { BuildingSection, ExpensesSection, FullPage, ImportSection, LineSection,
 import Link from "next/link";
 import { Row } from "@/components/ui";
 import { hardGo } from "@/lib/nav";
-import { collectionByPeriod, periodsBack } from "@/lib/insights";
-import type { Bill } from "@/lib/model";
+import { periodsBack } from "@/lib/insights";
 import { addRooms, roomDefaults, setMaintenanceStatus, updateProperty } from "@/lib/ops";
 import { promptPayPayload } from "@/lib/promptpay";
 import { parseRoomNumbers } from "@/lib/rooms";
@@ -240,16 +239,18 @@ export default function MorePage() {
   const [view, setView] = useState<string | null>(null);
   const period = periodOf(todayBkk());
   const periods = periodsBack(period, 6);
-  const bills = useLive<Bill>(query(collection(db(), "properties", property.id, "bills"), where("period", ">=", periods[0])), `${property.id}/bills/p/${periods[0]}`);
+  // money actually received, by payment date — the same basis as the year page
+  const pays = useLive<Payment>(query(collection(db(), "properties", property.id, "payments"), where("paidOn", ">=", `${periods[0]}-01`)), `${property.id}/pay/since/${periods[0]}`);
   const { start, end } = monthRange(period);
   const expenses = useLive<Expense>(query(collection(db(), "properties", property.id, "expenses"), where("spentOn", ">=", start), where("spentOn", "<=", end)), `${property.id}/exp/${period}`);
-  const coll = collectionByPeriod(bills.filter((b) => b.status !== "void"), periods);
+  const coll = periods.map((p) => ({ period: p, collected: pays.filter((x) => x.paidOn.startsWith(p) && x.method !== "deposit").reduce((s, x) => s + x.amount, 0) }));
   const got = coll[coll.length - 1]?.collected ?? 0, spent = expenses.reduce((s, e) => s + e.amount, 0);
   const max = Math.max(1, ...coll.map((c) => c.collected));
   const owed = openBills.reduce((s, b) => s + balance(b), 0);
   const writer = role !== "viewer", owner = role === "owner";
 
   const topics: Topic[] = [
+    { key: "year", label: "ผลประกอบการทั้งปี", hint: "รับ จ่าย กำไร 12 เดือน", href: "/year" },
     { key: "summary", label: "สรุปเดือน", hint: "รับ จ่าย ดาวน์โหลด", node: <MonthSummary /> },
     { key: "owed", label: "ยังไม่จ่าย", hint: openBills.length ? `${new Set(openBills.map((b) => b.roomId)).size} ห้อง ฿${thb(owed)}` : "ไม่มี", href: "/bills?status=open" },
     { key: "expenses", label: "รายจ่าย", hint: `฿${thb(spent)}`, node: <ExpensesSection /> },
@@ -288,11 +289,11 @@ export default function MorePage() {
       <h1 className="-mt-3 text-[28px] font-bold tracking-tight">การเงิน</h1>
       {role === "viewer" && <p className="rounded-2xl bg-line p-3 text-sm text-ink-2">บัญชีนี้ดูได้อย่างเดียว</p>}
       <div className="grid grid-cols-2 gap-2">
-        <div className="rounded-[20px] bg-surface p-4 ring-1 ring-line"><p className="text-sm text-muted">กำไร</p><p className="num text-2xl font-bold text-brand">฿{thb(got - spent)}</p></div>
-        <div className="rounded-[20px] bg-surface p-4 ring-1 ring-line"><p className="text-sm text-muted">รายจ่าย</p><p className="num text-2xl font-bold">฿{thb(spent)}</p></div>
+        <div className="rounded-[20px] bg-surface p-4 ring-1 ring-line"><p className="text-sm text-muted">กำไรเดือนนี้</p><p className="num text-2xl font-bold text-brand">฿{thb(got - spent)}</p></div>
+        <div className="rounded-[20px] bg-surface p-4 ring-1 ring-line"><p className="text-sm text-muted">รายจ่ายเดือนนี้</p><p className="num text-2xl font-bold">฿{thb(spent)}</p></div>
       </div>
-      <div className="rounded-[20px] bg-surface p-4 ring-1 ring-line">
-        <p className="text-sm text-muted">เก็บได้ 6 เดือนล่าสุด</p>
+      <Link href="/year" className="block rounded-[20px] bg-surface p-4 ring-1 ring-line">
+        <p className="flex justify-between text-sm text-muted"><span>รับเงิน 6 เดือนล่าสุด</span><span className="font-semibold text-brand">ทั้งปี ›</span></p>
         <div className="mt-3 grid h-28 grid-cols-6 items-end gap-2.5">
           {coll.map((c, i) => (
             <div key={c.period} className="flex h-full flex-col items-center justify-end gap-1" title={`${monthTh(c.period)} เก็บได้ ฿${thb(c.collected)}`}>
@@ -302,7 +303,7 @@ export default function MorePage() {
             </div>
           ))}
         </div>
-      </div>
+      </Link>
       <div className="overflow-hidden rounded-[20px] bg-surface ring-1 ring-line">
         {topics.map((t) => t.href
           ? <Link key={t.key} href={t.href} className="flex min-h-14 items-center justify-between gap-3 border-t border-line px-4 first:border-t-0"><span className="font-medium">{t.label}</span><span className="text-muted">{t.hint} <span className="text-line-2">›</span></span></Link>
