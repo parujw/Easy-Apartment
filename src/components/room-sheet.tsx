@@ -308,7 +308,7 @@ function IssuePanel({ room, lease, tenant, setPanel, onClose, back, today, perio
         const { start, end } = monthRange(period);
         const b = await issueBill(property, { room, tenantName: tenant?.fullName ?? "", tenantPhone: tenant?.phone ?? "", leaseId: lease.id, bookingId: null,
           periodStart: start, periodEnd: end, dueDate: dueDateAfterPeriod(period, lease.dueDay), items,
-          meter: { readOn: saved?.readOn ?? today, elec: elecCurr, water: waterCurr }, carryFrom: carry });
+          meter: { readOn: saved?.readOn ?? today, elec: elecCurr, water: waterCurr, id: saved?.id }, carryFrom: carry });
         setPanel({ name: "done", billId: b.id });
       })}>{items ? `ออกบิล ฿${thb(total(items))}` : error || "ใส่เลขไฟกับน้ำ"}</Btn>}>
       <div className="grid grid-cols-2 gap-2">

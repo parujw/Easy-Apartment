@@ -9,7 +9,7 @@ import { useData } from "@/components/data-provider";
 import { Btn, Card, useAction } from "@/components/ui";
 import { shareBill, billLink } from "@/components/bill-row";
 import { hardGo } from "@/lib/nav";
-import { editBill, issueBill, saveReadings } from "@/lib/ops";
+import { editBill, fixPrevReading, issueBill, saveReadings } from "@/lib/ops";
 import { meterBill, total, type BillItem } from "@/lib/billing";
 import { carryAmount, carryOverBills, tenancyLeaseIds } from "@/lib/carry";
 import { addDays, dueDateAfterPeriod, monthRange, periodOf, todayBkk } from "@/lib/dates";
@@ -32,6 +32,7 @@ export default function MetersPage() {
   const [issued, setIssued] = useState<Bill[]>([]);
   const [fixing, setFixing] = useState<string | null>(null);
   const [editPrev, setEditPrev] = useState<Set<string>>(new Set());
+  const [extras, setExtras] = useState<Set<string>>(new Set());
   const a = useAction();
 
   // Monthly rooms with a tenant, in room order
@@ -79,7 +80,10 @@ export default function MetersPage() {
     }
     const complete = Number.isFinite(elecCurr) && Number.isFinite(waterCurr);
     const unsaved = complete && (!saved || saved.elec !== elecCurr || saved.water !== waterCurr);
-    return { room, lease, last, saved, bill, r, items, error, carry, done: !!bill, complete, unsaved, elecCurr, waterCurr, knownPrev, elecPrev, waterPrev };
+    // a corrected (or first-time) "before" number is saved with the readings, not just used for this bill
+    const prevTyped = r.elecPrev !== "" && r.waterPrev !== "" && Number.isFinite(elecPrev) && Number.isFinite(waterPrev)
+      && (!last || last.elec !== elecPrev || last.water !== waterPrev);
+    return { room, lease, last, saved, bill, r, items, error, carry, done: !!bill, complete, unsaved: unsaved || (prevTyped && complete), elecCurr, waterCurr, knownPrev, elecPrev, waterPrev, prevTyped };
   });
   const ready = prepared.filter((p) => p.items && !p.done);
   const toSave = prepared.filter((p) => p.unsaved && !p.done);
@@ -91,25 +95,31 @@ export default function MetersPage() {
     all[all.indexOf(e.currentTarget) + 1]?.focus();
   };
 
+  const savePrev = async (list: typeof prepared) => {
+    for (const p of list.filter((x) => x.prevTyped)) await fixPrevReading(property.id, p.room, p.last ?? null, period, p.elecPrev, p.waterPrev);
+  };
+
   async function issueAll() {
     const { start, end } = monthRange(period);
     const out: Bill[] = [];
+    await savePrev(ready);
     for (const p of ready) {
       const tenant = tenants.get(p.lease.tenantId);
       out.push(await issueBill(property, {
         room: p.room, tenantName: tenant?.fullName ?? "", tenantPhone: tenant?.phone ?? "", leaseId: p.lease.id, bookingId: null,
         periodStart: start, periodEnd: end, dueDate: dueDateAfterPeriod(period, p.lease.dueDay), items: p.items!,
-        meter: { readOn: p.saved?.readOn ?? today, elec: num(p.r.elecCurr), water: num(p.r.waterCurr) }, carryFrom: p.carry,
+        meter: { readOn: p.saved?.readOn ?? today, elec: num(p.r.elecCurr), water: num(p.r.waterCurr), id: p.saved?.id }, carryFrom: p.carry,
       }));
       setIssued([...out]);
     }
-    setRows({});
+    setRows({}); setEditPrev(new Set());
     return `ออกบิลแล้ว ${out.length} ห้อง`;
   }
 
   async function saveOnly() {
-    await saveReadings(property.id, toSave.map((p) => ({ room: p.room, period, readOn: p.saved?.readOn ?? today, elec: p.elecCurr, water: p.waterCurr })));
-    setRows({});
+    await savePrev(toSave);
+    await saveReadings(property.id, toSave.map((p) => ({ room: p.room, period, readOn: p.saved?.readOn ?? today, elec: p.elecCurr, water: p.waterCurr, id: p.saved?.id })));
+    setRows({}); setEditPrev(new Set());
     return `บันทึกเลขมิเตอร์ ${toSave.length} ห้องแล้ว ออกบิลทีหลังได้`;
   }
 
@@ -117,7 +127,7 @@ export default function MetersPage() {
   async function updateIssued(p: (typeof prepared)[number]) {
     if (!p.bill || !p.items) throw new Error("กรอกเลขมิเตอร์ให้ครบก่อน");
     await editBill(property, p.bill, p.items, p.bill.note);
-    await saveReadings(property.id, [{ room: p.room, period, readOn: p.saved?.readOn ?? p.bill.issueDate, elec: p.elecCurr, water: p.waterCurr }]);
+    await saveReadings(property.id, [{ room: p.room, period, readOn: p.saved?.readOn ?? p.bill.issueDate, elec: p.elecCurr, water: p.waterCurr, id: p.saved?.id }]);
     setFixing(null);
     setRows((s) => { const n = { ...s }; delete n[p.room.id]; return n; });
     return `อัปเดตบิล ${p.bill.billNo} แล้ว · ฿${thb(total(p.items))}`;
@@ -129,7 +139,7 @@ export default function MetersPage() {
     return "คัดลอกลิงก์ทุกห้องแล้ว";
   }
 
-  const box = "mt-1 block w-full min-h-14 rounded-2xl bg-background px-3.5 text-xl font-semibold outline-none ring-0 focus:ring-2 focus:ring-brand";
+  const box = "mt-1 block w-full min-h-14 rounded-2xl bg-background px-3.5 text-xl font-semibold text-ink outline-none ring-0 focus:ring-2 focus:ring-brand";
   const todo = prepared.filter((p) => !p.done || fixing === p.room.id);
   const doneRows = prepared.filter((p) => p.done && fixing !== p.room.id);
   const MONTH = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
@@ -158,29 +168,45 @@ export default function MetersPage() {
             {!done && saved && <p className="mt-0.5 text-[13px] text-brand">เก็บเลขไว้แล้ว {saved.elec} / {saved.water}</p>}
             {done && <p className="mt-0.5 text-[13px] text-muted">แก้เลขของบิลที่ออกแล้ว ยอดในบิลจะเปลี่ยนตาม</p>}
             <div className="mt-2.5 grid grid-cols-2 gap-2 text-[13px] text-muted">
-              <label>ไฟ {knownPrev ? `(ครั้งก่อน ${thb(elecPrev)})` : ""}
-                {!knownPrev && <input className={box} inputMode="decimal" placeholder="เลขครั้งก่อน" data-meter value={r.elecPrev} onKeyDown={next} onChange={(e) => set(room.id, "elecPrev", e.target.value)} />}
-                <input className={box} inputMode="decimal" enterKeyHint="next" placeholder="เลขวันนี้" data-meter value={r.elecCurr} onKeyDown={next} onChange={(e) => set(room.id, "elecCurr", e.target.value)} />
-              </label>
-              <label>น้ำ {knownPrev ? `(ครั้งก่อน ${thb(waterPrev)})` : ""}
-                {!knownPrev && <input className={box} inputMode="decimal" placeholder="เลขครั้งก่อน" data-meter value={r.waterPrev} onKeyDown={next} onChange={(e) => set(room.id, "waterPrev", e.target.value)} />}
-                <input className={box} inputMode="decimal" enterKeyHint="next" placeholder="เลขวันนี้" data-meter value={r.waterCurr} onKeyDown={next} onChange={(e) => set(room.id, "waterCurr", e.target.value)} />
-              </label>
-            </div>
-            {!done && (
-              <details className="mt-1 text-sm">
-                <summary className="flex min-h-11 cursor-pointer items-center font-semibold text-brand [&::-webkit-details-marker]:hidden">ส่วนลด ค่าอื่นๆ แก้เลขเดิม{(r.other || r.discount) && " •"}</summary>
-                <div className="grid grid-cols-2 gap-2 text-[13px] text-muted">
-                  <label>ค่าอื่นๆ<input className={box} inputMode="decimal" value={r.other} onChange={(e) => set(room.id, "other", e.target.value)} /></label>
-                  <label>ส่วนลด<input className={box} inputMode="decimal" value={r.discount} onChange={(e) => set(room.id, "discount", e.target.value)} /></label>
+              {([["elec", "ไฟ", elecPrev], ["water", "น้ำ", waterPrev]] as const).map(([k, label, prevVal]) => (
+                <div key={k}>
+                  <p>{label}{knownPrev ? ` · ครั้งก่อน ${thb(prevVal)}` : ""}</p>
+                  {!knownPrev && (
+                    <label className="mt-1 block">เลขครั้งก่อน
+                      <input className={`${box} !mt-0.5 ring-1 ring-warn`} inputMode="decimal" placeholder="เลขครั้งก่อน" data-meter value={k === "elec" ? r.elecPrev : r.waterPrev} onKeyDown={next}
+                        onChange={(e) => set(room.id, k === "elec" ? "elecPrev" : "waterPrev", e.target.value)} />
+                    </label>
+                  )}
+                  <input aria-label={`${label} เลขวันนี้ ห้อง ${room.number}`} className={box} inputMode="decimal" enterKeyHint="next" placeholder="เลขวันนี้" data-meter
+                    value={k === "elec" ? r.elecCurr : r.waterCurr} onKeyDown={next} onChange={(e) => set(room.id, k === "elec" ? "elecCurr" : "waterCurr", e.target.value)} />
                 </div>
-                {knownPrev && (
-                  <button type="button" className="mt-1 min-h-11 font-semibold text-brand"
-                    onClick={() => { setEditPrev(new Set(editPrev).add(room.id)); setRows((x) => ({ ...x, [room.id]: { ...(x[room.id] ?? EMPTY), elecPrev: String(elecPrev), waterPrev: String(waterPrev) } })); }}>
-                    แก้เลขครั้งก่อน
-                  </button>
-                )}
-              </details>
+              ))}
+            </div>
+            <div className="mt-1 flex flex-wrap gap-x-5">
+              {knownPrev ? (
+                <button type="button" className="min-h-11 text-sm font-semibold text-brand"
+                  onClick={() => { setEditPrev(new Set(editPrev).add(room.id)); setRows((x) => ({ ...x, [room.id]: { ...(x[room.id] ?? EMPTY), elecPrev: String(elecPrev), waterPrev: String(waterPrev) } })); }}>
+                  แก้เลขครั้งก่อน
+                </button>
+              ) : editPrev.has(room.id) && (
+                <button type="button" className="min-h-11 text-sm font-semibold text-muted"
+                  onClick={() => { const n = new Set(editPrev); n.delete(room.id); setEditPrev(n); setRows((x) => ({ ...x, [room.id]: { ...(x[room.id] ?? EMPTY), elecPrev: "", waterPrev: "" } })); }}>
+                  ใช้เลขเดิม
+                </button>
+              )}
+              {!done && (
+                <button type="button" className="min-h-11 text-sm font-semibold text-brand" aria-expanded={extras.has(room.id)}
+                  onClick={() => { const n = new Set(extras); if (n.has(room.id)) n.delete(room.id); else n.add(room.id); setExtras(n); }}>
+                  ส่วนลด / ค่าอื่นๆ{(r.other || r.discount) ? " •" : ""}
+                </button>
+              )}
+            </div>
+            {editPrev.has(room.id) && <p className="text-[13px] text-warn-ink">เลขครั้งก่อนที่แก้จะบันทึกไว้ตอนกด “เก็บเลขไว้” หรือ “ออกบิล”</p>}
+            {!done && extras.has(room.id) && (
+              <div className="mt-1 grid grid-cols-2 gap-2 text-[13px] text-muted">
+                <label>ค่าอื่นๆ<input className={box} inputMode="decimal" value={r.other} onChange={(e) => set(room.id, "other", e.target.value)} /></label>
+                <label>ส่วนลด<input className={box} inputMode="decimal" value={r.discount} onChange={(e) => set(room.id, "discount", e.target.value)} /></label>
+              </div>
             )}
             {done && (
               <div className="mt-2 grid grid-cols-2 gap-2">

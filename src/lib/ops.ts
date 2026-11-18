@@ -44,7 +44,7 @@ const statusFor = (total: number, paid: number): Bill["status"] => (paid >= tota
 export type NewBill = {
   room: Pick<Room, "id" | "number">; tenantName: string; leaseId: string | null; bookingId: string | null;
   periodStart: string; periodEnd: string; dueDate: string; items: BillItem[]; note?: string;
-  meter?: { readOn: string; elec: number; water: number };
+  meter?: { readOn: string; elec: number; water: number; id?: string };
   tenantPhone?: string;
   /** earlier open bills of this tenancy whose balance is included as a "ยอดค้างยกมา" item */
   carryFrom?: Bill[];
@@ -83,7 +83,7 @@ export async function issueBill(p: Property, n: NewBill): Promise<Bill> {
   const batch = writeBatch(db());
   batch.set(billRef, bill);
   batch.set(doc(db(), "publicBills", bill.publicToken), publicCopy(p, bill, n.tenantPhone));
-  if (n.meter) batch.set(ref(p.id, "meterReadings", `${n.room.id}_${n.meter.readOn}`), { roomId: n.room.id, period: bill.period, ...n.meter });
+  if (n.meter) { const { id, ...m } = n.meter; batch.set(ref(p.id, "meterReadings", id ?? readingId(n.room.id, bill.period)), { roomId: n.room.id, period: bill.period, ...m }); }
   if (n.bookingId) batch.update(ref(p.id, "bookings", n.bookingId), { billId: billRef.id });
   for (const old of n.carryFrom ?? []) {
     batch.update(ref(p.id, "bills", old.id), { status: "carried", carriedTo: billRef.id, carriedStatus: old.status });
@@ -116,7 +116,7 @@ export async function editBill(p: Property, bill: Bill, items: BillItem[], note 
     if (meter.elec !== undefined) patch.elec = meter.elec;
     if (meter.water !== undefined) patch.water = meter.water;
     if (mine.length) for (const d of mine) batch.update(d.ref, patch);
-    else batch.set(ref(p.id, "meterReadings", `${bill.roomId}_${bill.issueDate}`), { roomId: bill.roomId, period: bill.period, readOn: bill.issueDate, elec: meter.elec ?? 0, water: meter.water ?? 0 });
+    else batch.set(ref(p.id, "meterReadings", readingId(bill.roomId, bill.period)), { roomId: bill.roomId, period: bill.period, readOn: bill.issueDate, elec: meter.elec ?? 0, water: meter.water ?? 0 });
   }
   audit(batch, p.id, "bill.edit", "bill", bill.id, `แก้บิล ${bill.billNo}: ฿${bill.total.toLocaleString("th-TH")} → ฿${total.toLocaleString("th-TH")}`);
   await batch.commit();
@@ -180,10 +180,27 @@ export async function voidBill(p: Property, bill: Bill, reason = "") {
 }
 
 /** Save meter numbers without issuing bills yet (bill later from the saved numbers). */
-export async function saveReadings(pid: string, rows: { room: Pick<Room, "id" | "number">; period: string; readOn: string; elec: number; water: number }[]) {
+/** One reading per room per billing month (ids used to be room+date: two months read on the same day overwrote each other). */
+export const readingId = (roomId: string, period: string) => `${roomId}_p${period}`;
+
+/**
+ * Correct the reading a bill starts from (e.g. a placeholder "1" carried over from the old system).
+ * Fixes that earlier reading itself, so this month's bill and every later screen agree; with no earlier
+ * reading, records one at the end of the previous month.
+ */
+export async function fixPrevReading(pid: string, room: Pick<Room, "id" | "number">, prev: { id: string } | null, period: string, elec: number, water: number) {
+  const [y, m] = period.split("-").map(Number);
+  const before = new Date(Date.UTC(y, m - 1, 0)).toISOString().slice(0, 10); // last day of the previous month
+  await one(pid, "meter.fixPrev", "room", room.id, `แก้เลขมิเตอร์ครั้งก่อน ห้อง ${room.number}: ไฟ ${elec} น้ำ ${water}`, (b) => {
+    if (prev) b.update(ref(pid, "meterReadings", prev.id), { elec, water });
+    else b.set(ref(pid, "meterReadings", readingId(room.id, before.slice(0, 7))), { roomId: room.id, period: before.slice(0, 7), readOn: before, elec, water });
+  });
+}
+
+export async function saveReadings(pid: string, rows: { room: Pick<Room, "id" | "number">; period: string; readOn: string; elec: number; water: number; id?: string }[]) {
   if (!rows.length) throw new Error("ยังไม่มีเลขมิเตอร์ที่กรอกครบ");
   const batch = writeBatch(db());
-  for (const r of rows) batch.set(ref(pid, "meterReadings", `${r.room.id}_${r.readOn}`), { roomId: r.room.id, period: r.period, readOn: r.readOn, elec: r.elec, water: r.water });
+  for (const r of rows) batch.set(ref(pid, "meterReadings", r.id ?? readingId(r.room.id, r.period)), { roomId: r.room.id, period: r.period, readOn: r.readOn, elec: r.elec, water: r.water });
   audit(batch, pid, "meter.save", "period", rows[0].period, `บันทึกเลขมิเตอร์ ${rows.length} ห้อง รอบ ${rows[0].period}`);
   await batch.commit();
 }
